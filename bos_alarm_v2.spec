@@ -13,6 +13,8 @@ a = Analysis(
     datas=[
         ('assets', 'assets'),
         ('_update.bat', '.'),
+        ('setup.bat', '.'),
+        ('config.example.json', '.'),
         (ctk_path, 'customtkinter'),
     ],
     hiddenimports=[
