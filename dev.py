@@ -12,10 +12,16 @@ import sys
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
-def run(cmd, capture=True, check=False):
-    result = subprocess.run(cmd, capture_output=capture, text=True, shell=True)
+def run(cmd, capture=True, check=False, input_text=None):
+    """Run a command. cmd can be a string (shell=True) or list (shell=False)."""
+    is_list = isinstance(cmd, list)
+    result = subprocess.run(
+        cmd, capture_output=capture, text=True,
+        shell=not is_list, input=input_text,
+    )
     if check and result.returncode != 0:
-        print(f"  FEHLER: {cmd}")
+        display = " ".join(cmd) if is_list else cmd
+        print(f"  FEHLER: {display}")
         if result.stderr:
             print(f"  {result.stderr.strip()}")
         sys.exit(1)
@@ -97,10 +103,13 @@ def suggest_bump_type(files):
     return "patch", "Standard fuer Bugfixes und kleine Aenderungen"
 
 def generate_branch_name(message):
-    """Generate a branch name from a commit message."""
-    clean = re.sub(r'[^a-zA-Z0-9\s-]', '', message.lower())
-    words = clean.split()[:5]
-    return "dev/" + "-".join(words)
+    """Generate a clean branch name from a commit message."""
+    clean = re.sub(r'[^a-zA-Z0-9\s]', '', message.lower()).strip()
+    words = clean.split()[:4]
+    name = "-".join(words) if words else "update"
+    # Avoid double dashes and trim
+    name = re.sub(r'-+', '-', name).strip('-')[:40]
+    return f"dev/{name}"
 
 def generate_commit_message(staged, modified, untracked):
     """Auto-generate a commit message suggestion based on changed files."""
@@ -248,7 +257,7 @@ def main():
     if action == "1" and branch == "main":
         branch_name = generate_branch_name(message)
         print(f"\n  Branch erstellen: {branch_name}")
-        run(f'git checkout -b "{branch_name}"', check=True)
+        run(["git", "checkout", "-b", branch_name], check=True)
         branch = branch_name
 
     # 2. Version bump
@@ -259,31 +268,33 @@ def main():
 
     # 3. Stage all changes
     print("  Dateien stagen...")
-    run("git add -A", check=True)
+    run(["git", "add", "-A"], check=True)
 
     # 4. Commit
     print(f"  Commit: {message}")
-    run(f'git commit -m "{message}"', check=True)
+    run(["git", "commit", "-m", message], check=True)
 
     # 5. Push + PR
     if action == "1":
-        print(f"  Push: {branch} → origin")
-        run(f"git push -u origin {branch}", check=True)
+        print(f"  Push: {branch} -> origin")
+        run(["git", "push", "-u", "origin", branch], check=True)
 
         print("  PR erstellen...")
         pr_title = message
         if do_bump:
             pr_title = f"v{new_version}: {message}"
 
-        pr_result = run(
-            f'gh pr create --title "{pr_title}" --body "Automatisch erstellt mit dev.py"',
-        )
+        pr_result = run([
+            "gh", "pr", "create",
+            "--title", pr_title,
+            "--body", "Automatisch erstellt mit dev.py",
+        ])
         if pr_result.returncode == 0:
             pr_url = pr_result.stdout.strip()
             print(f"\n  PR erstellt: {pr_url}")
 
             print("  Browser oeffnen...")
-            run(f'start {pr_url}', capture=False)
+            os.startfile(pr_url)
         else:
             print(f"  WARNUNG: PR konnte nicht erstellt werden.")
             print(f"  {pr_result.stderr.strip()}")
@@ -304,7 +315,7 @@ def main():
     if action == "1":
         switch_back = ask("  Zurueck auf main wechseln? (j/n) [j]: ", options=["j", "n"], default="j")
         if switch_back == "j":
-            run("git checkout main", check=True)
+            run(["git", "checkout", "main"], check=True)
             print("  Auf main gewechselt.\n")
 
 
