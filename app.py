@@ -300,6 +300,7 @@ class App:
         threading.Thread(target=self.hue.alarm_blink_then_restore, args=(threading.Event(),), daemon=True).start()
 
     def _test_sound(self):
+        self.sound.stop()
         self.sound.play_alarm()
 
     @staticmethod
