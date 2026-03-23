@@ -47,8 +47,15 @@ jobs:
           pip install -r requirements.txt
           pip install pyinstaller
 
-      - name: Build with PyInstaller
+      - name: Build app with PyInstaller
         run: pyinstaller bos_alarm_v2.spec --noconfirm
+
+      - name: Build setup wizard
+        run: pyinstaller setup_wizard.spec --noconfirm
+
+      - name: Copy Setup.exe into app folder
+        run: Copy-Item "dist/Setup.exe" "dist/BOS Alarm/Setup.exe"
+        shell: pwsh
 
       - name: Create ZIP
         run: Compress-Archive -Path "dist/BOS Alarm/*" -DestinationPath "BOS-Alarm-v${{ needs.check-version.outputs.version }}.zip"
