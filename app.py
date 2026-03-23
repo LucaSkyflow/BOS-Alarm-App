@@ -1,3 +1,4 @@
+import os
 import re
 import sys
 import threading
@@ -377,4 +378,9 @@ class App:
         self.mqtt_staging.disconnect()
         self.tray.stop()
         if self.window:
-            self.window.after(0, self.window.destroy)
+            self.window.after(0, self._exit)
+
+    def _exit(self):
+        if self.window:
+            self.window.destroy()
+        os._exit(0)
