@@ -17,7 +17,7 @@ class MQTTManager:
 
     def __init__(self, broker, port, username, password, use_tls, topic, label,
                  on_message_callback=None, on_connect_callback=None, on_disconnect_callback=None):
-        self._broker = broker
+        self._broker = self._clean_broker(broker)
         self._port = int(port)
         self._username = username
         self._password = password
@@ -28,6 +28,28 @@ class MQTTManager:
         self._on_connect_cb = on_connect_callback
         self._on_disconnect_cb = on_disconnect_callback
         self._client: mqtt.Client | None = None
+
+    @staticmethod
+    def _clean_broker(broker: str) -> str:
+        """Strip protocol prefixes and port from broker address.
+
+        Handles inputs like:
+          mqtts://mqtt.example.com:8883  →  mqtt.example.com
+          mqtt://mqtt.example.com        →  mqtt.example.com
+          tcp://mqtt.example.com:1883    →  mqtt.example.com
+          mqtt.example.com:8883          →  mqtt.example.com
+          mqtt.example.com               →  mqtt.example.com
+        """
+        b = broker.strip()
+        # Remove protocol prefix
+        for prefix in ("mqtts://", "mqtt://", "ssl://", "tcp://", "https://", "http://"):
+            if b.lower().startswith(prefix):
+                b = b[len(prefix):]
+                break
+        # Remove port suffix
+        if ":" in b:
+            b = b.split(":")[0]
+        return b.strip()
 
     def connect(self):
         self.disconnect()
