@@ -5,11 +5,12 @@ import customtkinter as ctk
 
 
 class SettingsTab(ctk.CTkFrame):
-    def __init__(self, parent, settings, on_apply=None, on_reset_statistics=None):
+    def __init__(self, parent, settings, on_apply=None, on_reset_statistics=None, on_check_update=None):
         super().__init__(parent)
         self._settings = settings
         self._on_apply = on_apply
         self._on_reset_statistics = on_reset_statistics
+        self._on_check_update = on_check_update
         self._entries: dict[str, ctk.CTkEntry | ctk.CTkCheckBox] = {}
         self._build_ui()
 
@@ -121,6 +122,11 @@ class SettingsTab(ctk.CTkFrame):
             anchor="nw", justify="left",
         ).pack(fill="x", padx=12, pady=10)
 
+        ctk.CTkButton(
+            container, text="Jetzt nach Updates suchen", width=200,
+            command=self._trigger_update_check,
+        ).pack(anchor="w", padx=5, pady=(0, 5))
+
         # ---- Data section ----
         self._section(container, "Daten")
         ctk.CTkButton(
@@ -187,6 +193,14 @@ class SettingsTab(ctk.CTkFrame):
         )
         if result and self._on_reset_statistics:
             self._on_reset_statistics()
+
+    def _trigger_update_check(self):
+        if self._on_check_update:
+            self._update_status_label.configure(text="Suche nach Updates...", text_color="#aaaaaa")
+            self._on_check_update()
+
+    def set_update_status(self, text, color="#aaaaaa"):
+        self._update_status_label.configure(text=text, text_color=color)
 
     def _apply(self):
         data = {}

@@ -1,10 +1,15 @@
 import json
 import ssl
 import logging
-import certifi
 import paho.mqtt.client as mqtt
 
 log = logging.getLogger(__name__)
+
+try:
+    import certifi
+    _CA_CERTS = certifi.where()
+except Exception:
+    _CA_CERTS = None
 
 
 class MQTTManager:
@@ -30,11 +35,19 @@ class MQTTManager:
         self._client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
 
         if self._use_tls:
-            self._client.tls_set(
-                ca_certs=certifi.where(),
-                cert_reqs=ssl.CERT_REQUIRED,
-                tls_version=ssl.PROTOCOL_TLS_CLIENT,
-            )
+            if _CA_CERTS:
+                log.info(f"MQTT [{self._label}] TLS with certifi: {_CA_CERTS}")
+                self._client.tls_set(
+                    ca_certs=_CA_CERTS,
+                    cert_reqs=ssl.CERT_REQUIRED,
+                    tls_version=ssl.PROTOCOL_TLS_CLIENT,
+                )
+            else:
+                log.info(f"MQTT [{self._label}] TLS with system defaults")
+                self._client.tls_set(
+                    cert_reqs=ssl.CERT_REQUIRED,
+                    tls_version=ssl.PROTOCOL_TLS_CLIENT,
+                )
 
         if self._username:
             self._client.username_pw_set(self._username, self._password)
@@ -45,9 +58,18 @@ class MQTTManager:
 
         self._client.reconnect_delay_set(min_delay=1, max_delay=30)
 
-        log.info(f"MQTT [{self._label}] connecting to {self._broker}:{self._port} (TLS={self._use_tls})")
-        self._client.connect_async(self._broker, self._port)
-        self._client.loop_start()
+        if not self._broker:
+            log.warning(f"MQTT [{self._label}] broker is empty — skipping connect")
+            return
+
+        log.info(f"MQTT [{self._label}] connecting to {self._broker}:{self._port} "
+                 f"(TLS={self._use_tls}, user={self._username!r})")
+        try:
+            self._client.connect_async(self._broker, self._port)
+            self._client.loop_start()
+        except Exception as e:
+            log.error(f"MQTT [{self._label}] connect_async failed: {e}")
+            self._client = None
 
     def disconnect(self):
         if self._client is not None:

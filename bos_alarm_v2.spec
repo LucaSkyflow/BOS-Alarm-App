@@ -1,6 +1,8 @@
 # -*- mode: python ; coding: utf-8 -*-
 import os
 import customtkinter
+import certifi
+from PyInstaller.utils.hooks import collect_data_files
 
 block_cipher = None
 
@@ -12,14 +14,16 @@ a = Analysis(
     binaries=[],
     datas=[
         ('assets', 'assets'),
+        ('Blaulicht.ico', '.'),
         ('_update.bat', '.'),
         ('setup.bat', '.'),
         ('config.example.json', '.'),
         (ctk_path, 'customtkinter'),
-    ],
+    ] + collect_data_files('certifi'),
     hiddenimports=[
         'pystray._win32',
         'PIL._tkinter_finder',
+        'certifi',
     ],
     hookspath=[],
     hooksconfig={},

@@ -1,4 +1,5 @@
 import os
+import sys
 import customtkinter as ctk
 from gui.dashboard_tab import DashboardTab
 from gui.mqtt_tests_tab import MqttTestsTab
@@ -7,11 +8,14 @@ from version import VERSION
 
 
 class MainWindow(ctk.CTk):
-    def __init__(self, settings, alarm_store, on_test_hue=None, on_test_sound=None, on_apply_settings=None, on_quit=None, on_reset_statistics=None, on_test_full_alarm=None, on_finish_trip=None):
+    def __init__(self, settings, alarm_store, on_test_hue=None, on_test_sound=None, on_apply_settings=None, on_quit=None, on_reset_statistics=None, on_test_full_alarm=None, on_finish_trip=None, on_check_update=None):
         super().__init__()
 
         self.title(f"BOS Alarm — v{VERSION}")
-        _ico = os.path.join(os.path.dirname(__file__), "..", "Blaulicht.ico")
+        if getattr(sys, "frozen", False):
+            _ico = os.path.join(sys._MEIPASS, "Blaulicht.ico")
+        else:
+            _ico = os.path.join(os.path.dirname(__file__), "..", "Blaulicht.ico")
         if os.path.exists(_ico):
             self.iconbitmap(_ico)
         self.geometry("900x700")
@@ -69,6 +73,7 @@ class MainWindow(ctk.CTk):
             settings,
             on_apply=on_apply_settings,
             on_reset_statistics=on_reset_statistics,
+            on_check_update=on_check_update,
         )
         self.settings_tab.pack(fill="both", expand=True)
 

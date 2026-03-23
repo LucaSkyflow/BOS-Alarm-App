@@ -81,6 +81,7 @@ class App:
             on_reset_statistics=self._reset_statistics,
             on_test_full_alarm=self._test_full_alarm,
             on_finish_trip=self._on_finish_trip,
+            on_check_update=self._manual_update_check,
         )
 
         # start tray
@@ -321,6 +322,7 @@ class App:
         def on_status(msg, color="#aaaaaa"):
             if self.window:
                 self.window.after(0, lambda: self.window.dashboard.set_update_status(msg, color))
+                self.window.after(0, lambda: self.window.settings_tab.set_update_status(msg, color))
 
         result = check_for_update(on_status=on_status)
         if result:
@@ -331,6 +333,9 @@ class App:
                 # Give the UI a moment to show the message, then quit
                 if self.window:
                     self.window.after(2000, self._do_quit)
+
+    def _manual_update_check(self):
+        threading.Thread(target=self._check_for_updates, daemon=True).start()
 
     def _apply_settings(self):
         log.info("Settings applied, reconnecting MQTT...")
