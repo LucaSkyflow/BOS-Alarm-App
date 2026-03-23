@@ -2,13 +2,22 @@ import json
 import os
 import sys
 
-# For PyInstaller frozen apps, config.json lives next to the exe (app root),
-# not inside _internal/ where __file__ resolves.
+# Two directories needed:
+# _APP_DIR  = where config.json lives (next to the exe)
+# _RES_DIR  = where bundled resources live (assets/, etc.)
+#
+# In PyInstaller frozen builds:
+#   _APP_DIR = exe directory (e.g. C:\BOS Alarm\)
+#   _RES_DIR = sys._MEIPASS  (e.g. C:\BOS Alarm\_internal\)
+# In development:
+#   Both are the script directory.
 if getattr(sys, "frozen", False):
-    _DIR = os.path.dirname(sys.executable)
+    _APP_DIR = os.path.dirname(sys.executable)
+    _RES_DIR = sys._MEIPASS
 else:
-    _DIR = os.path.dirname(os.path.abspath(__file__))
-CONFIG_PATH = os.path.join(_DIR, "config.json")
+    _APP_DIR = os.path.dirname(os.path.abspath(__file__))
+    _RES_DIR = _APP_DIR
+CONFIG_PATH = os.path.join(_APP_DIR, "config.json")
 
 MQTT_PRESETS = {
     "staging": {
@@ -102,14 +111,14 @@ class SettingsManager:
         raw = self.get("alarm_wav_file", "assets/Alarm.wav")
         if os.path.isabs(raw):
             return raw
-        return os.path.join(_DIR, raw)
+        return os.path.join(_RES_DIR, raw)
 
     def wav_helicopter_path(self) -> str:
         raw = self.get("alarm_wav_helicopter", "")
         if raw and os.path.isabs(raw) and os.path.exists(raw):
             return raw
         if raw and not os.path.isabs(raw):
-            full = os.path.join(_DIR, raw)
+            full = os.path.join(_RES_DIR, raw)
             if os.path.exists(full):
                 return full
         # Fallback to normal alarm WAV

@@ -1,6 +1,7 @@
 import json
 import ssl
 import logging
+import certifi
 import paho.mqtt.client as mqtt
 
 log = logging.getLogger(__name__)
@@ -29,7 +30,11 @@ class MQTTManager:
         self._client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
 
         if self._use_tls:
-            self._client.tls_set(cert_reqs=ssl.CERT_REQUIRED, tls_version=ssl.PROTOCOL_TLS_CLIENT)
+            self._client.tls_set(
+                ca_certs=certifi.where(),
+                cert_reqs=ssl.CERT_REQUIRED,
+                tls_version=ssl.PROTOCOL_TLS_CLIENT,
+            )
 
         if self._username:
             self._client.username_pw_set(self._username, self._password)
