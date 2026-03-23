@@ -1,0 +1,65 @@
+name: Build & Release
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  check-version:
+    runs-on: ubuntu-latest
+    outputs:
+      version_changed: ${{ steps.check.outputs.changed }}
+      version: ${{ steps.check.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Check if version.py changed
+        id: check
+        run: |
+          if git diff HEAD~1 --name-only | grep -q "^version.py$"; then
+            VERSION=$(grep -oP 'VERSION\s*=\s*"\K[^"]+' version.py)
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+            echo "Version changed to $VERSION"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "version.py not changed — skipping release"
+          fi
+
+  build-and-release:
+    needs: check-version
+    if: needs.check-version.outputs.version_changed == 'true'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Build with PyInstaller
+        run: pyinstaller bos_alarm_v2.spec --noconfirm
+
+      - name: Create ZIP
+        run: Compress-Archive -Path "dist/BOS Alarm/*" -DestinationPath "BOS-Alarm-v${{ needs.check-version.outputs.version }}.zip"
+        shell: pwsh
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "v${{ needs.check-version.outputs.version }}" `
+            "BOS-Alarm-v${{ needs.check-version.outputs.version }}.zip" `
+            --title "v${{ needs.check-version.outputs.version }}" `
+            --generate-notes
+        shell: pwsh
