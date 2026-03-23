@@ -7,6 +7,12 @@ import subprocess
 import tempfile
 import requests
 
+# For PyInstaller frozen apps, use the exe directory as app root
+if getattr(sys, "frozen", False):
+    _APP_DIR = os.path.dirname(sys.executable)
+else:
+    _APP_DIR = os.path.dirname(os.path.abspath(__file__))
+
 from version import VERSION
 
 log = logging.getLogger(__name__)
@@ -15,9 +21,6 @@ log = logging.getLogger(__name__)
 GITHUB_API_URL = "https://api.github.com"
 REPO = "LucaSkyflow/BOS-Alarm-App"
 RELEASE_URL = f"{GITHUB_API_URL}/repos/{REPO}/releases/latest"
-
-# Directory where the app is installed (the folder containing the exe / main.py)
-_APP_DIR = os.path.dirname(os.path.abspath(__file__))
 
 
 def _parse_version(tag: str) -> tuple[int, ...]:
@@ -45,21 +48,7 @@ def check_for_update(on_status=None):
     try:
         status("Suche nach Updates...")
 
-        # Build auth header — try gh CLI token for private repos
         headers = {"Accept": "application/vnd.github+json"}
-        try:
-            result = subprocess.run(
-                "gh auth token",
-                capture_output=True, text=True, timeout=5,
-                shell=True,
-                creationflags=subprocess.CREATE_NO_WINDOW,
-            )
-            token = result.stdout.strip()
-            if token:
-                headers["Authorization"] = f"Bearer {token}"
-        except Exception:
-            pass  # gh not installed or not authenticated — try without
-
         resp = requests.get(RELEASE_URL, headers=headers, timeout=10)
         if resp.status_code == 404:
             status(f"App ist aktuell (v{VERSION})", "#4caf50")
@@ -117,21 +106,7 @@ def download_and_apply(asset_url: str, new_version: str, on_status=None):
 
     try:
         status(f"Lade Update v{new_version} herunter...")
-        # Auth header for private repo downloads
-        headers = {"Accept": "application/octet-stream"}
-        try:
-            result = subprocess.run(
-                "gh auth token",
-                capture_output=True, text=True, timeout=5,
-                shell=True,
-                creationflags=subprocess.CREATE_NO_WINDOW,
-            )
-            token = result.stdout.strip()
-            if token:
-                headers["Authorization"] = f"Bearer {token}"
-        except Exception:
-            pass
-        resp = requests.get(asset_url, headers=headers, timeout=120, stream=True)
+        resp = requests.get(asset_url, timeout=120, stream=True)
         resp.raise_for_status()
 
         # Save ZIP to temp file

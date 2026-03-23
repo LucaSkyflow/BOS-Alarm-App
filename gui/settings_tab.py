@@ -1,4 +1,3 @@
-import subprocess
 import tkinter as tk
 from tkinter import filedialog, messagebox
 import customtkinter as ctk
@@ -106,34 +105,14 @@ class SettingsTab(ctk.CTkFrame):
             container, text="", font=("", 12), text_color="#aaaaaa", anchor="w",
         )
         self._update_status_label.pack(fill="x", padx=5, pady=(0, 5))
-        self._check_gh_status()
 
         guide_frame = ctk.CTkFrame(container, fg_color="#1e1e2e", corner_radius=8)
         guide_frame.pack(fill="x", padx=5, pady=(0, 5))
 
         guide_text = (
-            "Damit die App sich automatisch aktualisiert, muss einmalig\n"
-            "die GitHub CLI eingerichtet werden:\n"
-            "\n"
-            "Schritt 1 — GitHub Account\n"
-            "  Du brauchst einen GitHub-Account. Falls du noch\n"
-            "  keinen hast, erstelle einen auf github.com.\n"
-            "  Teile deinen GitHub-Benutzernamen dem Admin mit,\n"
-            "  damit er dich zum Repository einladen kann.\n"
-            "\n"
-            "Schritt 2 — GitHub CLI installieren\n"
-            "  Lade die GitHub CLI herunter und installiere sie:\n"
-            "  https://cli.github.com\n"
-            "\n"
-            "Schritt 3 — Anmelden\n"
-            "  Öffne ein Terminal (cmd oder PowerShell) und gib ein:\n"
-            "  gh auth login\n"
-            "  Wähle: GitHub.com → HTTPS → Login with a web browser\n"
-            "  Folge den Anweisungen im Browser.\n"
-            "\n"
-            "Schritt 4 — Fertig!\n"
-            "  Die App prüft beim Start automatisch auf Updates.\n"
-            "  Du kannst dieses Fenster schließen."
+            "Die App prüft beim Start automatisch auf Updates.\n"
+            "Neue Versionen werden automatisch heruntergeladen\n"
+            "und installiert — es ist keine Einrichtung nötig."
         )
 
         ctk.CTkLabel(
@@ -141,11 +120,6 @@ class SettingsTab(ctk.CTkFrame):
             font=("Consolas", 11), text_color="#cccccc",
             anchor="nw", justify="left",
         ).pack(fill="x", padx=12, pady=10)
-
-        ctk.CTkButton(
-            container, text="Verbindung prüfen", width=160,
-            command=self._check_gh_status,
-        ).pack(anchor="w", padx=5, pady=(0, 5))
 
         # ---- Data section ----
         self._section(container, "Daten")
@@ -244,35 +218,6 @@ class SettingsTab(ctk.CTkFrame):
 
         if self._on_apply:
             self._on_apply()
-
-    def _check_gh_status(self):
-        try:
-            result = subprocess.run(
-                "gh auth status",
-                capture_output=True, text=True, timeout=5,
-                shell=True,
-                creationflags=subprocess.CREATE_NO_WINDOW,
-            )
-            if result.returncode == 0:
-                self._update_status_label.configure(
-                    text="GitHub CLI: Verbunden",
-                    text_color="#00cc00",
-                )
-            else:
-                self._update_status_label.configure(
-                    text="GitHub CLI: Nicht angemeldet — siehe Anleitung unten",
-                    text_color="#cc4444",
-                )
-        except FileNotFoundError:
-            self._update_status_label.configure(
-                text="GitHub CLI: Nicht installiert — siehe Anleitung unten",
-                text_color="#cc4444",
-            )
-        except Exception:
-            self._update_status_label.configure(
-                text="GitHub CLI: Status unbekannt",
-                text_color="#aaaaaa",
-            )
 
     def refresh_from_settings(self):
         for key, widget in self._entries.items():

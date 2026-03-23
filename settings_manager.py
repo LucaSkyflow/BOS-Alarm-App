@@ -1,7 +1,13 @@
 import json
 import os
+import sys
 
-_DIR = os.path.dirname(os.path.abspath(__file__))
+# For PyInstaller frozen apps, config.json lives next to the exe (app root),
+# not inside _internal/ where __file__ resolves.
+if getattr(sys, "frozen", False):
+    _DIR = os.path.dirname(sys.executable)
+else:
+    _DIR = os.path.dirname(os.path.abspath(__file__))
 CONFIG_PATH = os.path.join(_DIR, "config.json")
 
 MQTT_PRESETS = {
