@@ -132,10 +132,24 @@ def download_and_apply(asset_url: str, new_version: str, on_status=None):
 
         status("Starte Update-Prozess...")
 
-        # Launch the update batch script
-        bat_path = os.path.join(_APP_DIR, "_update.bat")
+        # Find the update batch script — in frozen builds it's inside _MEIPASS
+        if getattr(sys, "frozen", False):
+            bat_src = os.path.join(sys._MEIPASS, "_update.bat")
+        else:
+            bat_src = os.path.join(_APP_DIR, "_update.bat")
+
+        if not os.path.exists(bat_src):
+            log.error(f"_update.bat not found at {bat_src}")
+            status("Update fehlgeschlagen (_update.bat nicht gefunden)")
+            return False
+
+        # Copy batch script to temp so it doesn't get overwritten during update
+        bat_tmp = os.path.join(tempfile.gettempdir(), "bos_alarm_update.bat")
+        shutil.copy2(bat_src, bat_tmp)
+
+        log.info(f"Launching update: {bat_tmp} {source_dir} {_APP_DIR}")
         subprocess.Popen(
-            [bat_path, source_dir, _APP_DIR],
+            [bat_tmp, source_dir, _APP_DIR],
             creationflags=subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS,
         )
 
