@@ -232,10 +232,10 @@ class App:
         if source == "production":
             self.tray.set_color("green")
 
-    def _on_mqtt_disconnect(self, source: str):
-        log.warning(f"MQTT [{source}] disconnected callback")
+    def _on_mqtt_disconnect(self, source: str, reason: str = ""):
+        log.warning(f"MQTT [{source}] disconnected callback (reason={reason})")
         if self.window:
-            self.window.after(0, lambda: self.window.dashboard.set_mqtt_status(source, False))
+            self.window.after(0, lambda: self.window.dashboard.set_mqtt_status(source, False, reason))
         if source == "production":
             self.tray.set_color("blue")
 

@@ -21,6 +21,14 @@ class SettingsTab(ctk.CTkFrame):
         # ---- MQTT ----
         self._section(container, "MQTT Einstellungen")
 
+        # MQTT Diagnose
+        self._mqtt_diag_label = ctk.CTkLabel(
+            container, text="", font=("Consolas", 11), text_color="#aaaaaa",
+            anchor="w", justify="left",
+        )
+        self._mqtt_diag_label.pack(fill="x", padx=5, pady=(2, 5))
+        self._update_mqtt_diag()
+
         # Production MQTT fields
         self._field(container, "mqtt_broker", "Production Broker")
         self._field(container, "mqtt_username", "Production Username")
@@ -193,6 +201,36 @@ class SettingsTab(ctk.CTkFrame):
         )
         if result and self._on_reset_statistics:
             self._on_reset_statistics()
+
+    def _update_mqtt_diag(self):
+        """Show MQTT diagnostic info."""
+        import sys
+        from settings_manager import _APP_DIR, CONFIG_PATH
+        import os
+
+        broker = self._settings.get("mqtt_broker", "")
+        user = self._settings.get("mqtt_username", "")
+        port = self._settings.get("mqtt_port", "?")
+        tls = self._settings.get("mqtt_tls", "?")
+        config_exists = os.path.exists(CONFIG_PATH)
+
+        try:
+            import certifi
+            ca = certifi.where()
+            ca_ok = os.path.exists(ca)
+            ca_info = f"OK ({os.path.basename(ca)})" if ca_ok else f"FEHLT ({ca})"
+        except Exception:
+            ca_info = "certifi nicht verfuegbar"
+
+        frozen = "Ja" if getattr(sys, "frozen", False) else "Nein"
+
+        lines = [
+            f"Config: {CONFIG_PATH} ({'OK' if config_exists else 'FEHLT'})",
+            f"Broker: [{broker}]  Port: [{port}]  TLS: [{tls}]",
+            f"User: [{user}]  Frozen: [{frozen}]",
+            f"CA-Zertifikate: {ca_info}",
+        ]
+        self._mqtt_diag_label.configure(text="\n".join(lines))
 
     def _trigger_update_check(self):
         if self._on_check_update:

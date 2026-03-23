@@ -61,7 +61,7 @@ class DashboardTab(ctk.CTkFrame):
         if not self._update_banner.winfo_manager():
             self._update_banner.pack(fill="x", padx=10, pady=(5, 0), before=self.stats_panel)
 
-    def set_mqtt_status(self, source: str, connected: bool | None):
+    def set_mqtt_status(self, source: str, connected: bool | None, reason: str = ""):
         if source == "production":
             label = self.mqtt_prod_status
         else:
@@ -72,7 +72,10 @@ class DashboardTab(ctk.CTkFrame):
         elif connected:
             label.configure(text="Verbunden", text_color="#00cc00")
         else:
-            label.configure(text="Getrennt", text_color="red")
+            text = "Getrennt"
+            if reason and reason != "Normal disconnection":
+                text = f"Getrennt ({reason})"
+            label.configure(text=text, text_color="red")
 
     def set_hue_status(self, reachable: bool):
         if reachable:

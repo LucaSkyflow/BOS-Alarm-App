@@ -93,7 +93,7 @@ class MQTTManager:
     def _on_disconnect(self, client, userdata, flags, reason_code, properties=None):
         log.warning(f"MQTT [{self._label}] disconnected (rc={reason_code})")
         if self._on_disconnect_cb:
-            self._on_disconnect_cb(self._label)
+            self._on_disconnect_cb(self._label, str(reason_code))
 
     def _on_message(self, client, userdata, msg):
         topic = msg.topic
