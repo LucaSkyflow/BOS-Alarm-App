@@ -1,0 +1,14 @@
+# Build artifacts
+dist/
+build/
+__pycache__/
+*.pyc
+
+# Runtime files
+*.lock
+*.log
+alarms.db
+
+# Credentials
+config.json
+.env
