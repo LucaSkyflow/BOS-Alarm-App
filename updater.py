@@ -132,25 +132,67 @@ def download_and_apply(asset_url: str, new_version: str, on_status=None):
 
         status("Starte Update-Prozess...")
 
-        # Find the update batch script — in frozen builds it's inside _MEIPASS
-        if getattr(sys, "frozen", False):
-            bat_src = os.path.join(sys._MEIPASS, "_update.bat")
-        else:
-            bat_src = os.path.join(_APP_DIR, "_update.bat")
+        # Use PowerShell for the update — more reliable than batch scripts.
+        # Waits for this process (by PID) to exit, copies files, restarts app.
+        pid = os.getpid()
+        exe_path = os.path.join(_APP_DIR, "BOS Alarm.exe")
+        log_path = os.path.join(_APP_DIR, "update.log")
 
-        if not os.path.exists(bat_src):
-            log.error(f"_update.bat not found at {bat_src}")
-            status("Update fehlgeschlagen (_update.bat nicht gefunden)")
-            return False
+        ps_script = os.path.join(tempfile.gettempdir(), "bos_alarm_update.ps1")
+        with open(ps_script, "w", encoding="utf-8") as f:
+            f.write(f'''
+$appPid = {pid}
+$source = "{source_dir}"
+$target = "{_APP_DIR}"
+$logFile = "{log_path}"
+$exe = "{exe_path}"
 
-        # Copy batch script to temp so it doesn't get overwritten during update
-        bat_tmp = os.path.join(tempfile.gettempdir(), "bos_alarm_update.bat")
-        shutil.copy2(bat_src, bat_tmp)
+function Log($msg) {{
+    $line = "[$(Get-Date -Format 'HH:mm:ss')] $msg"
+    Add-Content -Path $logFile -Value $line -Encoding UTF8
+}}
 
-        log.info(f"Launching update: {bat_tmp} {source_dir} {_APP_DIR}")
+Log "Update gestartet (warte auf PID $appPid)"
+Log "Quelle: $source"
+Log "Ziel: $target"
+
+try {{
+    $proc = Get-Process -Id $appPid -ErrorAction Stop
+    Log "Prozess gefunden, warte auf Beendigung..."
+    $proc.WaitForExit(30000) | Out-Null
+    Log "Prozess beendet"
+}} catch {{
+    Log "Prozess bereits beendet"
+}}
+
+Start-Sleep -Seconds 2
+
+Log "Kopiere Update..."
+try {{
+    Copy-Item -Path "$source\*" -Destination $target -Recurse -Force
+    Log "Kopieren erfolgreich"
+}} catch {{
+    Log "FEHLER beim Kopieren: $_"
+    exit 1
+}}
+
+if (Test-Path $exe) {{
+    Log "Starte App: $exe"
+    Start-Process -FilePath $exe -WorkingDirectory $target
+    Log "App gestartet"
+}} else {{
+    Log "FEHLER: $exe nicht gefunden"
+}}
+
+Start-Sleep -Seconds 2
+Remove-Item -Path $source -Recurse -Force -ErrorAction SilentlyContinue
+Log "Update abgeschlossen"
+''')
+
+        log.info(f"Launching PowerShell updater (PID={pid})")
         subprocess.Popen(
-            [bat_tmp, source_dir, _APP_DIR],
-            creationflags=subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS,
+            f'start /B powershell -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "{ps_script}"',
+            shell=True,
         )
 
         return True
