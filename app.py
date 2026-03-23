@@ -373,14 +373,21 @@ class App:
     def _do_quit(self):
         log.info("Quitting application")
         self._health_stop.set()
-        self.alarm_engine.stop()
-        self.mqtt_prod.disconnect()
-        self.mqtt_staging.disconnect()
-        self.tray.stop()
-        if self.window:
-            self.window.after(0, self._exit)
-
-    def _exit(self):
-        if self.window:
-            self.window.destroy()
+        try:
+            self.alarm_engine.stop()
+        except Exception:
+            pass
+        try:
+            self.mqtt_prod.disconnect()
+        except Exception:
+            pass
+        try:
+            self.mqtt_staging.disconnect()
+        except Exception:
+            pass
+        try:
+            self.tray.stop()
+        except Exception:
+            pass
+        log.info("Cleanup done, exiting process")
         os._exit(0)
