@@ -83,6 +83,7 @@ class App:
             on_test_full_alarm=self._test_full_alarm,
             on_finish_trip=self._on_finish_trip,
             on_check_update=self._manual_update_check,
+            on_test_heli_sound=self._test_heli_sound,
         )
 
         # start tray
@@ -145,13 +146,38 @@ class App:
                 self.window.after(0, lambda r=record: self.window.dashboard.add_alarm(r))
                 self.notifications.send_alarm_notification(record)
 
-        # Helicopter detection from trip_updated
+        # trip_confirmed → BESTÄTIGT + stop alarm
+        if payload is not None and payload.get("name") == "trip_confirmed":
+            trip = payload.get("trip", {})
+            trip_id = trip.get("id") or self._extract_trip_id_from_topic(topic)
+            if trip_id:
+                log.info(f"TRIP CONFIRMED [{trip_id}]")
+                self.alarm_store.update_trip_status(trip_id, "confirmed")
+                if self.window:
+                    self.window.after(0, lambda tid=trip_id: self.window.dashboard.update_card_status(tid, "confirmed"))
+                self.alarm_engine.stop_alarm_for_trip(trip_id)
+                if self.window and not self.alarm_engine.has_active_alarms():
+                    self.window.after(0, self.window.dashboard.stop_alarm_blink)
+
+        # trip_completed → BEENDET
+        if payload is not None and payload.get("name") == "trip_completed":
+            trip_id = self._extract_trip_id_from_topic(topic)
+            if trip_id:
+                log.info(f"TRIP COMPLETED [{trip_id}]")
+                self.alarm_store.update_trip_status(trip_id, "finished")
+                if self.window:
+                    self.window.after(0, lambda tid=trip_id: self.window.dashboard.update_card_status(tid, "finished"))
+                self.alarm_engine.stop_alarm_for_trip(trip_id)
+                if self.window and not self.alarm_engine.has_active_alarms():
+                    self.window.after(0, self.window.dashboard.stop_alarm_blink)
+
+        # trip_updated → status changes + helicopter detection
         if payload is not None and payload.get("name") == "trip_updated":
             trip = payload.get("trip", {})
             if trip.get("status") == "CONFIRMED":
                 trip_id = trip.get("id") or self._extract_trip_id_from_topic(topic)
                 if trip_id:
-                    log.info(f"TRIP CONFIRMED [{trip_id}]")
+                    log.info(f"TRIP CONFIRMED (via update) [{trip_id}]")
                     self.alarm_store.update_trip_status(trip_id, "confirmed")
                     if self.window:
                         self.window.after(0, lambda tid=trip_id: self.window.dashboard.update_card_status(tid, "confirmed"))
@@ -168,7 +194,7 @@ class App:
             elif trip.get("status") == "COMPLETED":
                 trip_id = trip.get("id") or self._extract_trip_id_from_topic(topic)
                 if trip_id:
-                    log.info(f"TRIP COMPLETED [{trip_id}]")
+                    log.info(f"TRIP COMPLETED (via update) [{trip_id}]")
                     self.alarm_store.update_trip_status(trip_id, "finished")
                     if self.window:
                         self.window.after(0, lambda tid=trip_id: self.window.dashboard.update_card_status(tid, "finished"))
@@ -179,14 +205,24 @@ class App:
             if notification is not None:
                 message = notification.get("message", "")
                 if "Incoming helicopter" in message:
-                    log.info("HELICOPTER INCOMING")
+                    heli_trip_id = self._extract_trip_id_from_topic(topic)
+                    log.info(f"HELICOPTER INCOMING [{heli_trip_id}]")
                     threading.Thread(target=self.sound.play_helicopter_alarm, daemon=True).start()
                     if self.window:
-                        self.window.after(0, self.window.dashboard.show_helicopter_banner)
+                        self.window.after(0, lambda tid=heli_trip_id: self.window.dashboard.show_helicopter_banner(tid))
+                    if heli_trip_id:
+                        self.alarm_store.update_trip_helicopter(heli_trip_id, True)
+                        if self.window:
+                            self.window.after(0, lambda tid=heli_trip_id: self.window.dashboard.update_card_helicopter(tid, True))
                 elif "Helicopter canceled" in message:
-                    log.info("HELICOPTER CANCELED")
+                    heli_trip_id = self._extract_trip_id_from_topic(topic)
+                    log.info(f"HELICOPTER CANCELED [{heli_trip_id}]")
                     if self.window:
-                        self.window.after(0, self.window.dashboard.dismiss_helicopter_banner)
+                        self.window.after(0, lambda tid=heli_trip_id: self.window.dashboard.dismiss_helicopter_banner(tid))
+                    if heli_trip_id:
+                        self.alarm_store.update_trip_helicopter(heli_trip_id, False)
+                        if self.window:
+                            self.window.after(0, lambda tid=heli_trip_id: self.window.dashboard.update_card_helicopter(tid, False))
                 elif "Aktion abgelehnt" in message:
                     trip_id = self._extract_trip_id_from_topic(topic)
                     if trip_id:
@@ -198,7 +234,7 @@ class App:
                         if self.window and not self.alarm_engine.has_active_alarms():
                             self.window.after(0, self.window.dashboard.stop_alarm_blink)
 
-        # Trip deleted: trip_deleted event -> mark as deleted
+        # trip_deleted → GELÖSCHT
         if payload is not None and payload.get("name") == "trip_deleted":
             trip_id = self._extract_trip_id_from_topic(topic)
             if trip_id:
@@ -303,6 +339,14 @@ class App:
         self.sound.stop()
         self.sound.play_alarm()
 
+    def _test_heli_sound(self):
+        self.sound.stop()
+        # Play helicopter sound once (override loop count to 1)
+        original = self.settings.get("helicopter_loop_count", 5)
+        self.settings.set("helicopter_loop_count", 1)
+        self.sound.play_helicopter_alarm()
+        self.settings.set("helicopter_loop_count", original)
+
     @staticmethod
     def _extract_trip_id_from_topic(topic: str) -> str | None:
         # Topic format: sf/organizations/{org}/trips/{trip_id}/events
@@ -340,9 +384,37 @@ class App:
         threading.Thread(target=self._check_for_updates, daemon=True).start()
 
     def _apply_settings(self):
-        log.info("Settings applied, reconnecting MQTT...")
+        log.info("Settings applied, recreating MQTT connections...")
         self.mqtt_prod.disconnect()
         self.mqtt_staging.disconnect()
+
+        # Recreate with current settings (credentials may have changed)
+        self.mqtt_prod = MQTTManager(
+            broker=self.settings.get("mqtt_broker", ""),
+            port=self.settings.get("mqtt_port", 8883),
+            username=self.settings.get("mqtt_username", ""),
+            password=self.settings.get("mqtt_password", ""),
+            use_tls=self.settings.get("mqtt_tls", True),
+            topic=self.settings.get("mqtt_topic", "sf/organizations/#"),
+            label="production",
+            on_message_callback=self._on_mqtt_message,
+            on_connect_callback=self._on_mqtt_connect,
+            on_disconnect_callback=self._on_mqtt_disconnect,
+        )
+
+        self.mqtt_staging = MQTTManager(
+            broker=self.settings.get("staging_mqtt_broker", ""),
+            port=self.settings.get("staging_mqtt_port", 8883),
+            username=self.settings.get("staging_mqtt_username", ""),
+            password=self.settings.get("staging_mqtt_password", ""),
+            use_tls=self.settings.get("staging_mqtt_tls", True),
+            topic=self.settings.get("staging_mqtt_topic", "sf/organizations/#"),
+            label="staging",
+            on_message_callback=self._on_mqtt_message,
+            on_connect_callback=self._on_mqtt_connect,
+            on_disconnect_callback=self._on_mqtt_disconnect,
+        )
+
         self._start_mqtt()
 
     def _quit(self):

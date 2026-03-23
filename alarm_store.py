@@ -175,6 +175,21 @@ class AlarmStore:
         finally:
             conn.close()
 
+    def update_trip_helicopter(self, trip_id: str, incoming: bool) -> bool:
+        conn = self._connect()
+        try:
+            cursor = conn.execute(
+                "UPDATE alarms SET incoming_helicopter = ? WHERE trip_id = ?",
+                (int(incoming), trip_id),
+            )
+            conn.commit()
+            return cursor.rowcount > 0
+        except Exception as e:
+            log.error(f"Failed to update helicopter status: {e}")
+            return False
+        finally:
+            conn.close()
+
     def update_trip_status(self, trip_id: str, status: str) -> bool:
         conn = self._connect()
         try:

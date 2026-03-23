@@ -3,7 +3,6 @@ from tkinter import filedialog, messagebox
 import customtkinter as ctk
 
 
-
 class SettingsTab(ctk.CTkFrame):
     def __init__(self, parent, settings, on_apply=None, on_reset_statistics=None, on_check_update=None):
         super().__init__(parent)
@@ -12,8 +11,9 @@ class SettingsTab(ctk.CTkFrame):
         self._on_reset_statistics = on_reset_statistics
         self._on_check_update = on_check_update
         self._entries: dict[str, ctk.CTkEntry | ctk.CTkCheckBox] = {}
-        self._apply_timer = None
+        self._saved_snapshot: dict = {}
         self._build_ui()
+        self._take_snapshot()
 
     def _build_ui(self):
         container = ctk.CTkScrollableFrame(self)
@@ -37,7 +37,7 @@ class SettingsTab(ctk.CTkFrame):
             staging_row,
             text="",
             variable=self._staging_var,
-            command=self._on_staging_toggle,
+            command=self._on_change,
         )
         self._staging_switch.pack(side="left", padx=5)
 
@@ -51,7 +51,7 @@ class SettingsTab(ctk.CTkFrame):
             alarm_row,
             text="",
             variable=self._staging_alarm_var,
-            command=self._on_staging_alarm_toggle,
+            command=self._on_change,
         )
         self._staging_alarm_cb.pack(side="left", padx=5)
         self._update_staging_alarm_state()
@@ -97,6 +97,15 @@ class SettingsTab(ctk.CTkFrame):
 
         self._field(container, "quit_password", "Beenden-Passwort")
         self._update_quit_pw_state()
+
+        # ---- Apply button ----
+        self._apply_btn = ctk.CTkButton(
+            self, text="Keine Änderungen", command=self._apply,
+            height=40, font=("", 14, "bold"),
+            fg_color="#555555", hover_color="#555555",
+            state="disabled",
+        )
+        self._apply_btn.pack(pady=15)
 
         # ---- Auto-Update ----
         self._section(container, "Auto-Update")
@@ -148,8 +157,7 @@ class SettingsTab(ctk.CTkFrame):
         entry.pack(side="left", padx=5, fill="x", expand=True)
         val = self._settings.get(key, "")
         entry.insert(0, str(val))
-        entry.bind("<FocusOut>", self._on_field_changed)
-        entry.bind("<Return>", self._on_field_changed)
+        entry.bind("<KeyRelease>", self._on_change)
         self._entries[key] = entry
 
     def _file_field(self, parent, key: str, label: str, filetypes=None):
@@ -162,8 +170,7 @@ class SettingsTab(ctk.CTkFrame):
         entry.pack(side="left", padx=5, fill="x", expand=True)
         val = self._settings.get(key, "")
         entry.insert(0, str(val))
-        entry.bind("<FocusOut>", self._on_field_changed)
-        entry.bind("<Return>", self._on_field_changed)
+        entry.bind("<KeyRelease>", self._on_change)
         self._entries[key] = entry
         ctk.CTkButton(row, text="...", width=40, command=lambda: self._browse_file(entry, filetypes)).pack(side="left", padx=5)
 
@@ -172,27 +179,46 @@ class SettingsTab(ctk.CTkFrame):
         if path:
             entry.delete(0, "end")
             entry.insert(0, path)
-            self._schedule_apply()
+            self._on_change()
 
-    def _on_staging_toggle(self):
+    # ── Change tracking ──────────────────────────────────────────────────
+
+    def _get_current_values(self) -> dict:
+        data = {}
+        for key, widget in self._entries.items():
+            data[key] = widget.get()
+        data["staging_enabled"] = self._staging_var.get()
+        data["staging_alarm_enabled"] = self._staging_alarm_var.get()
+        data["quit_password_enabled"] = self._quit_pw_enabled_var.get()
+        return data
+
+    def _take_snapshot(self):
+        self._saved_snapshot = self._get_current_values()
+
+    def _has_changes(self) -> bool:
+        return self._get_current_values() != self._saved_snapshot
+
+    def _on_change(self, _event=None):
         self._update_staging_alarm_state()
-        self._schedule_apply()
+        self._update_quit_pw_state()
+        if self._has_changes():
+            self._apply_btn.configure(
+                text="Übernehmen & Neu verbinden",
+                fg_color="#2980b9",
+                hover_color="#2471a3",
+                state="normal",
+            )
+        else:
+            self._apply_btn.configure(
+                text="Keine Änderungen",
+                fg_color="#555555",
+                hover_color="#555555",
+                state="disabled",
+            )
 
     def _on_quit_pw_toggle(self):
         self._update_quit_pw_state()
-        self._schedule_apply()
-
-    def _on_staging_alarm_toggle(self):
-        self._schedule_apply()
-
-    def _on_field_changed(self, _event=None):
-        self._schedule_apply()
-
-    def _schedule_apply(self):
-        """Debounce: wait 800ms after last change before applying."""
-        if self._apply_timer is not None:
-            self.after_cancel(self._apply_timer)
-        self._apply_timer = self.after(800, self._apply)
+        self._on_change()
 
     def _update_quit_pw_state(self):
         state = "normal" if self._quit_pw_enabled_var.get() else "disabled"
@@ -251,6 +277,15 @@ class SettingsTab(ctk.CTkFrame):
         if self._on_apply:
             self._on_apply()
 
+        # Mark as saved
+        self._take_snapshot()
+        self._apply_btn.configure(
+            text="Gespeichert",
+            fg_color="#1a5c35",
+            hover_color="#1a5c35",
+            state="disabled",
+        )
+
     def refresh_from_settings(self):
         for key, widget in self._entries.items():
             widget.delete(0, "end")
@@ -260,3 +295,5 @@ class SettingsTab(ctk.CTkFrame):
         self._update_staging_alarm_state()
         self._quit_pw_enabled_var.set(self._settings.get("quit_password_enabled", True))
         self._update_quit_pw_state()
+        self._take_snapshot()
+        self._on_change()

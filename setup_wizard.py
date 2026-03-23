@@ -86,6 +86,9 @@ class SetupWizard:
         self.mqtt_password = tk.StringVar()
         self.hue_ip = tk.StringVar()
         self.hue_username = tk.StringVar()
+        self.staging_broker = tk.StringVar()
+        self.staging_username = tk.StringVar()
+        self.staging_password = tk.StringVar()
         self.create_desktop_shortcut = tk.BooleanVar(value=True)
         self.start_app = tk.BooleanVar(value=True)
 
@@ -133,6 +136,7 @@ class SetupWizard:
             self._page_welcome,
             self._page_install_dir,
             self._page_mqtt,
+            self._page_staging,
             self._page_hue,
             self._page_options,
             self._page_install,
@@ -221,6 +225,18 @@ class SetupWizard:
         self._labeled_entry(f, "Username:", self.mqtt_username)
         self._labeled_entry(f, "Passwort:", self.mqtt_password)
 
+    def _page_staging(self):
+        f = self.page_frame
+        ttk.Label(f, text="Staging MQTT (optional)", style="Title.TLabel").pack(anchor="w", pady=(10, 5))
+        ttk.Label(f, text=(
+            "Für die Staging-Umgebung.\n"
+            "Leer lassen zum Überspringen."
+        ), style="Sub.TLabel").pack(anchor="w", pady=(5, 15))
+
+        self._labeled_entry(f, "Broker:", self.staging_broker)
+        self._labeled_entry(f, "Username:", self.staging_username)
+        self._labeled_entry(f, "Passwort:", self.staging_password)
+
     def _page_hue(self):
         f = self.page_frame
         ttk.Label(f, text="Philips Hue (optional)", style="Title.TLabel").pack(anchor="w", pady=(10, 5))
@@ -245,10 +261,12 @@ class SetupWizard:
 
         ttk.Label(f, text="\nZusammenfassung:", style="Field.TLabel").pack(anchor="w", pady=(15, 5))
 
+        stg = self.staging_broker.get()
         summary = (
             f"  Installationsordner:  {self.install_dir.get()}\n"
             f"  MQTT Broker:  {self.mqtt_broker.get()}\n"
             f"  MQTT Username:  {self.mqtt_username.get()}\n"
+            f"  Staging:  {stg or '(nicht konfiguriert)'}\n"
             f"  Hue Bridge:  {self.hue_ip.get() or '(nicht konfiguriert)'}"
         )
         ttk.Label(f, text=summary, style="Sub.TLabel", justify="left").pack(anchor="w")
@@ -309,6 +327,11 @@ class SetupWizard:
             config["mqtt_broker"] = self.mqtt_broker.get().strip()
             config["mqtt_username"] = self.mqtt_username.get().strip()
             config["mqtt_password"] = self.mqtt_password.get().strip()
+            config["staging_mqtt_broker"] = self.staging_broker.get().strip()
+            config["staging_mqtt_username"] = self.staging_username.get().strip()
+            config["staging_mqtt_password"] = self.staging_password.get().strip()
+            if self.staging_broker.get().strip():
+                config["staging_enabled"] = True
             config["hue_bridge_ip"] = self.hue_ip.get().strip()
             config["hue_username"] = self.hue_username.get().strip()
 

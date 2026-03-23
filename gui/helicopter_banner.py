@@ -7,6 +7,7 @@ class HelicopterBanner(ctk.CTkFrame):
         self._blink_state = True
         self._blink_job = None
         self._active = False
+        self._trip_id = None
 
         self._build_ui()
         # Start hidden
@@ -24,7 +25,8 @@ class HelicopterBanner(ctk.CTkFrame):
         )
         self._label.pack(expand=True, padx=20, pady=10)
 
-    def show(self):
+    def show(self, trip_id: str = None):
+        self._trip_id = trip_id
         if self._active:
             return
         self._active = True
@@ -32,10 +34,14 @@ class HelicopterBanner(ctk.CTkFrame):
         self.pack(fill="x", padx=0, pady=0, before=self._get_first_sibling())
         self._start_blink()
 
-    def dismiss(self):
+    def dismiss(self, trip_id: str = None):
+        # Only dismiss if it's for the same trip (or no trip specified)
+        if trip_id and self._trip_id and trip_id != self._trip_id:
+            return
         if not self._active:
             return
         self._active = False
+        self._trip_id = None
 
         if self._blink_job:
             self.after_cancel(self._blink_job)

@@ -8,7 +8,7 @@ from version import VERSION
 
 
 class MainWindow(ctk.CTk):
-    def __init__(self, settings, alarm_store, on_test_hue=None, on_test_sound=None, on_apply_settings=None, on_quit=None, on_reset_statistics=None, on_test_full_alarm=None, on_finish_trip=None, on_check_update=None):
+    def __init__(self, settings, alarm_store, on_test_hue=None, on_test_sound=None, on_apply_settings=None, on_quit=None, on_reset_statistics=None, on_test_full_alarm=None, on_finish_trip=None, on_check_update=None, on_test_heli_sound=None):
         super().__init__()
 
         self.title(f"BOS Alarm — v{VERSION}")
@@ -65,6 +65,7 @@ class MainWindow(ctk.CTk):
             on_test_hue=on_test_hue,
             on_test_sound=on_test_sound,
             on_test_full_alarm=on_test_full_alarm,
+            on_test_heli_sound=on_test_heli_sound,
         )
         self.mqtt_tab.pack(fill="both", expand=True)
 

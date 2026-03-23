@@ -5,11 +5,12 @@ MAX_FEED_ENTRIES = 500
 
 
 class MqttTestsTab(ctk.CTkFrame):
-    def __init__(self, parent, on_test_hue=None, on_test_sound=None, on_test_full_alarm=None):
+    def __init__(self, parent, on_test_hue=None, on_test_sound=None, on_test_full_alarm=None, on_test_heli_sound=None):
         super().__init__(parent)
         self._on_test_hue = on_test_hue
         self._on_test_sound = on_test_sound
         self._on_test_full_alarm = on_test_full_alarm
+        self._on_test_heli_sound = on_test_heli_sound
         self._feed_count = 0
 
         self._build_ui()
@@ -21,6 +22,7 @@ class MqttTestsTab(ctk.CTkFrame):
 
         ctk.CTkButton(btn_frame, text="Test Hue Alarm", command=self._test_hue, width=140).pack(side="left", padx=10, pady=5)
         ctk.CTkButton(btn_frame, text="Test Sound", command=self._test_sound, width=140).pack(side="left", padx=10, pady=5)
+        ctk.CTkButton(btn_frame, text="Test Heli Sound", command=self._test_heli_sound, width=140).pack(side="left", padx=10, pady=5)
         ctk.CTkButton(
             btn_frame,
             text="Vollständiger Alarm Test",
@@ -102,6 +104,10 @@ class MqttTestsTab(ctk.CTkFrame):
     def _test_sound(self):
         if self._on_test_sound:
             self._on_test_sound()
+
+    def _test_heli_sound(self):
+        if self._on_test_heli_sound:
+            self._on_test_heli_sound()
 
     def _test_full_alarm(self):
         if self._on_test_full_alarm:

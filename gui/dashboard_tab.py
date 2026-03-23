@@ -39,12 +39,6 @@ class DashboardTab(ctk.CTkFrame):
         self.hue_status.pack(side="left", padx=(0, 15))
 
         # ---- Update Banner (hidden by default) ----
-        self._update_banner = ctk.CTkLabel(
-            self, text="", font=("", 12), text_color="#aaaaaa",
-            fg_color="#1a1a2e", corner_radius=6, height=0,
-        )
-        # Not packed until set_update_status() is called
-
         # ---- Statistics Panel ----
         self.stats_panel = StatisticsPanel(self, self._store)
         self.stats_panel.pack(fill="x", padx=10, pady=(5, 5))
@@ -57,9 +51,7 @@ class DashboardTab(ctk.CTkFrame):
         self._cards_container.pack(fill="both", expand=True, padx=10, pady=(0, 10))
 
     def set_update_status(self, message: str, color: str = "#aaaaaa"):
-        self._update_banner.configure(text=f"  {message}", text_color=color)
-        if not self._update_banner.winfo_manager():
-            self._update_banner.pack(fill="x", padx=10, pady=(5, 0), before=self.stats_panel)
+        pass  # Update status only shown in settings tab
 
     def set_mqtt_status(self, source: str, connected: bool | None, reason: str = ""):
         if source == "production":
@@ -124,17 +116,22 @@ class DashboardTab(ctk.CTkFrame):
         if card:
             card.update_status(status)
 
+    def update_card_helicopter(self, trip_id: str, incoming: bool):
+        card = self._card_map.get(trip_id)
+        if card:
+            card.update_helicopter(incoming)
+
     def clear_and_refresh(self):
         for child in self._cards_container.winfo_children():
             child.destroy()
         self._card_map.clear()
         self.stats_panel.refresh()
 
-    def show_helicopter_banner(self):
-        self.helicopter_banner.show()
+    def show_helicopter_banner(self, trip_id: str = None):
+        self.helicopter_banner.show(trip_id)
 
-    def dismiss_helicopter_banner(self):
-        self.helicopter_banner.dismiss()
+    def dismiss_helicopter_banner(self, trip_id: str = None):
+        self.helicopter_banner.dismiss(trip_id)
 
     # ---- Alarm blink (blue flash on cards container) ----
     def start_alarm_blink(self):
