@@ -18,7 +18,7 @@ import sys
 import shutil
 import subprocess
 
-REPO = "Skyflow-Network/bos-alarm-app"
+REPO = "LucaSkyflow/BOS-Alarm-App"
 VERSION_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "version.py")
 SPEC_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "bos_alarm_v2.spec")
 DIST_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "dist", "BOS Alarm")

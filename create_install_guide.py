@@ -39,7 +39,7 @@ def create_guide():
     section(pdf, "Schritt 2: Einladung annehmen")
     pdf.multi_cell(0, 6,
         "Du erhaeltst eine E-Mail von GitHub mit einer Einladung zum Repository "
-        "'Skyflow-Network/bos-alarm-app'. Klicke auf 'Accept invitation'."
+        "'LucaSkyflow/BOS-Alarm-App'. Klicke auf 'Accept invitation'."
     )
     pdf.ln(3)
 
@@ -76,7 +76,7 @@ def create_guide():
     # --- Step 5 ---
     section(pdf, "Schritt 5: App herunterladen")
     pdf.multi_cell(0, 6,
-        "1. Oeffne im Browser: github.com/Skyflow-Network/bos-alarm-app\n"
+        "1. Oeffne im Browser: github.com/LucaSkyflow/BOS-Alarm-App\n"
         "2. Klicke rechts auf 'Releases'\n"
         "3. Lade das ZIP-Archiv der neuesten Version herunter\n"
         "4. Entpacke das ZIP in einen Ordner deiner Wahl, z.B. C:\\BOS Alarm\\"

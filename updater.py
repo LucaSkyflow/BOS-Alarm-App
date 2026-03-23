@@ -13,7 +13,7 @@ log = logging.getLogger(__name__)
 
 # ---- Configuration ----
 GITHUB_API_URL = "https://api.github.com"
-REPO = "Skyflow-Network/bos-alarm-app"
+REPO = "LucaSkyflow/BOS-Alarm-App"
 RELEASE_URL = f"{GITHUB_API_URL}/repos/{REPO}/releases/latest"
 
 # Directory where the app is installed (the folder containing the exe / main.py)
