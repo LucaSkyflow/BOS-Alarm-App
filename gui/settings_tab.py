@@ -12,6 +12,7 @@ class SettingsTab(ctk.CTkFrame):
         self._on_reset_statistics = on_reset_statistics
         self._on_check_update = on_check_update
         self._entries: dict[str, ctk.CTkEntry | ctk.CTkCheckBox] = {}
+        self._apply_timer = None
         self._build_ui()
 
     def _build_ui(self):
@@ -50,6 +51,7 @@ class SettingsTab(ctk.CTkFrame):
             alarm_row,
             text="",
             variable=self._staging_alarm_var,
+            command=self._on_staging_alarm_toggle,
         )
         self._staging_alarm_cb.pack(side="left", padx=5)
         self._update_staging_alarm_state()
@@ -95,9 +97,6 @@ class SettingsTab(ctk.CTkFrame):
 
         self._field(container, "quit_password", "Beenden-Passwort")
         self._update_quit_pw_state()
-
-        # ---- Apply button ----
-        ctk.CTkButton(self, text="Übernehmen & Neu verbinden", command=self._apply, height=40, font=("", 14, "bold")).pack(pady=15)
 
         # ---- Auto-Update ----
         self._section(container, "Auto-Update")
@@ -149,6 +148,8 @@ class SettingsTab(ctk.CTkFrame):
         entry.pack(side="left", padx=5, fill="x", expand=True)
         val = self._settings.get(key, "")
         entry.insert(0, str(val))
+        entry.bind("<FocusOut>", self._on_field_changed)
+        entry.bind("<Return>", self._on_field_changed)
         self._entries[key] = entry
 
     def _file_field(self, parent, key: str, label: str, filetypes=None):
@@ -161,6 +162,8 @@ class SettingsTab(ctk.CTkFrame):
         entry.pack(side="left", padx=5, fill="x", expand=True)
         val = self._settings.get(key, "")
         entry.insert(0, str(val))
+        entry.bind("<FocusOut>", self._on_field_changed)
+        entry.bind("<Return>", self._on_field_changed)
         self._entries[key] = entry
         ctk.CTkButton(row, text="...", width=40, command=lambda: self._browse_file(entry, filetypes)).pack(side="left", padx=5)
 
@@ -169,12 +172,27 @@ class SettingsTab(ctk.CTkFrame):
         if path:
             entry.delete(0, "end")
             entry.insert(0, path)
+            self._schedule_apply()
 
     def _on_staging_toggle(self):
         self._update_staging_alarm_state()
+        self._schedule_apply()
 
     def _on_quit_pw_toggle(self):
         self._update_quit_pw_state()
+        self._schedule_apply()
+
+    def _on_staging_alarm_toggle(self):
+        self._schedule_apply()
+
+    def _on_field_changed(self, _event=None):
+        self._schedule_apply()
+
+    def _schedule_apply(self):
+        """Debounce: wait 800ms after last change before applying."""
+        if self._apply_timer is not None:
+            self.after_cancel(self._apply_timer)
+        self._apply_timer = self.after(800, self._apply)
 
     def _update_quit_pw_state(self):
         state = "normal" if self._quit_pw_enabled_var.get() else "disabled"
