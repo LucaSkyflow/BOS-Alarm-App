@@ -48,8 +48,10 @@ class AlarmEngine:
             self._tray.set_color("red")
 
         def _run_hue():
+            hue_ok = False
             try:
                 self._hue.alarm_blink_then_restore(stop_event)
+                hue_ok = True
             except Exception as e:
                 log.error(f"Alarm Hue error: {e}")
             finally:
@@ -57,7 +59,7 @@ class AlarmEngine:
                     self._active.pop(trip_id, None)
                     still_active = bool(self._active)
                 if not still_active:
-                    if not incoming_helicopter:
+                    if hue_ok and not incoming_helicopter:
                         self._sound.stop()
                     if self._tray:
                         self._tray.set_color("green")
