@@ -23,6 +23,7 @@ class AlarmRecord:
     distance: float
     raw_json: str
     status: str = "active"
+    source: str = "production"
 
 
 class AlarmStore:
@@ -59,10 +60,16 @@ class AlarmStore:
                 conn.commit()
             except sqlite3.OperationalError:
                 pass  # Column already exists
+            # Migration for source column
+            try:
+                conn.execute("ALTER TABLE alarms ADD COLUMN source TEXT NOT NULL DEFAULT 'production'")
+                conn.commit()
+            except sqlite3.OperationalError:
+                pass  # Column already exists
         finally:
             conn.close()
 
-    def insert_alarm(self, payload: dict, raw: str) -> AlarmRecord | None:
+    def insert_alarm(self, payload: dict, raw: str, source: str = "production") -> AlarmRecord | None:
         trip = payload.get("trip", {})
         trip_id = trip.get("id", "")
         if not trip_id:
@@ -97,10 +104,10 @@ class AlarmStore:
         try:
             conn.execute(
                 """INSERT OR IGNORE INTO alarms
-                   (trip_id, timestamp, local_time, address, organization, incoming_helicopter, distance, raw_json)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                   (trip_id, timestamp, local_time, address, organization, incoming_helicopter, distance, raw_json, source)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (trip_id, timestamp, local_time, address, organization,
-                 int(incoming_helicopter), distance, raw),
+                 int(incoming_helicopter), distance, raw, source),
             )
             conn.commit()
             row = conn.execute("SELECT * FROM alarms WHERE trip_id = ?", (trip_id,)).fetchone()
@@ -238,4 +245,5 @@ class AlarmStore:
             distance=row["distance"],
             raw_json=row["raw_json"],
             status=row["status"],
+            source=row["source"] if "source" in row.keys() else "production",
         )

@@ -84,6 +84,7 @@ class App:
             on_finish_trip=self._on_finish_trip,
             on_check_update=self._manual_update_check,
             on_test_heli_sound=self._test_heli_sound,
+            on_volume_change=self._on_volume_change,
         )
 
         # start tray
@@ -141,7 +142,7 @@ class App:
 
         # If alarm, store in DB and show card on dashboard
         if is_alarm and payload:
-            record = self.alarm_store.insert_alarm(payload, raw)
+            record = self.alarm_store.insert_alarm(payload, raw, source=source)
             if record and self.window:
                 self.window.after(0, lambda r=record: self.window.dashboard.add_alarm(r))
                 self.notifications.send_alarm_notification(record)
@@ -338,6 +339,10 @@ class App:
     def _test_sound(self):
         self.sound.stop()
         self.sound.play_alarm()
+
+    def _on_volume_change(self, level: float):
+        self.sound.set_volume(level)
+        self.settings.set("volume", level)
 
     def _test_heli_sound(self):
         self.sound.stop()

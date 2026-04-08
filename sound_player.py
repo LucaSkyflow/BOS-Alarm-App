@@ -25,10 +25,6 @@ class SoundPlayer:
 
     def play_alarm(self):
         log.debug("play_alarm() called")
-        if winsound is None:
-            log.warning("winsound not available on this platform.")
-            return
-
         wav = self._settings.wav_path()
         if not os.path.exists(wav):
             log.warning(f"Alarm WAV not found: {wav}")
@@ -36,6 +32,23 @@ class SoundPlayer:
 
         log.debug(f"Playing normal alarm: {wav!r}")
         self.stop()
+
+        # Prefer pygame for volume control
+        if pygame is not None:
+            try:
+                vol = float(self._settings.get("volume", 0.8))
+                pygame.mixer.music.set_volume(vol)
+                pygame.mixer.music.load(wav)
+                pygame.mixer.music.play()
+                log.debug(f"pygame alarm playback started (vol={vol})")
+                return
+            except Exception as e:
+                log.warning(f"pygame alarm fallback: {e}")
+
+        # Fallback to winsound (no volume control)
+        if winsound is None:
+            log.warning("winsound not available on this platform.")
+            return
         try:
             winsound.PlaySound(wav, winsound.SND_FILENAME | winsound.SND_ASYNC)
         except Exception as e:
@@ -83,6 +96,8 @@ class SoundPlayer:
             log.debug(f"Using pygame for playback (loops={loop_count - 1})")
             self.stop()
             try:
+                vol = float(self._settings.get("volume", 0.8))
+                _pg.mixer.music.set_volume(vol)
                 _pg.mixer.music.load(wav)
                 _pg.mixer.music.play(loops=loop_count - 1)
                 log.debug("pygame.mixer.music.play() called successfully")
@@ -125,6 +140,14 @@ class SoundPlayer:
                 return wf.getnframes() / float(wf.getframerate())
         except Exception:
             return None
+
+    def set_volume(self, level: float):
+        """Set volume level (0.0 to 1.0) for pygame mixer."""
+        if pygame is not None:
+            try:
+                pygame.mixer.music.set_volume(level)
+            except Exception:
+                pass
 
     def stop(self):
         log.debug("SoundPlayer.stop() called")
