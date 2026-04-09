@@ -156,18 +156,29 @@ class App:
                 self.alarm_store.update_trip_status(trip_id, "confirmed")
                 if self.window:
                     self.window.after(0, lambda tid=trip_id: self.window.dashboard.update_card_status(tid, "confirmed"))
+                desc = trip.get("description", "")
+                if desc:
+                    self.alarm_store.update_trip_description(trip_id, desc)
+                    if self.window:
+                        self.window.after(0, lambda tid=trip_id, d=desc: self.window.dashboard.update_card_description(tid, d))
                 self.alarm_engine.stop_alarm_for_trip(trip_id)
                 if self.window and not self.alarm_engine.has_active_alarms():
                     self.window.after(0, self.window.dashboard.stop_alarm_blink)
 
         # trip_completed → BEENDET
         if payload is not None and payload.get("name") == "trip_completed":
-            trip_id = self._extract_trip_id_from_topic(topic)
+            trip = payload.get("trip", {})
+            trip_id = trip.get("id") or self._extract_trip_id_from_topic(topic)
             if trip_id:
                 log.info(f"TRIP COMPLETED [{trip_id}]")
                 self.alarm_store.update_trip_status(trip_id, "finished")
                 if self.window:
                     self.window.after(0, lambda tid=trip_id: self.window.dashboard.update_card_status(tid, "finished"))
+                desc = trip.get("description", "")
+                if desc:
+                    self.alarm_store.update_trip_description(trip_id, desc)
+                    if self.window:
+                        self.window.after(0, lambda tid=trip_id, d=desc: self.window.dashboard.update_card_description(tid, d))
                 self.alarm_engine.stop_alarm_for_trip(trip_id)
                 if self.window and not self.alarm_engine.has_active_alarms():
                     self.window.after(0, self.window.dashboard.stop_alarm_blink)
@@ -202,6 +213,14 @@ class App:
                     self.alarm_engine.stop_alarm_for_trip(trip_id)
                     if self.window and not self.alarm_engine.has_active_alarms():
                         self.window.after(0, self.window.dashboard.stop_alarm_blink)
+            # Extract description from trip object if present
+            desc = trip.get("description", "")
+            if desc:
+                desc_trip_id = trip.get("id") or self._extract_trip_id_from_topic(topic)
+                if desc_trip_id:
+                    self.alarm_store.update_trip_description(desc_trip_id, desc)
+                    if self.window:
+                        self.window.after(0, lambda tid=desc_trip_id, d=desc: self.window.dashboard.update_card_description(tid, d))
             notification = payload.get("notification")
             if notification is not None:
                 message = notification.get("message", "")
@@ -234,6 +253,14 @@ class App:
                         self.alarm_engine.stop_alarm_for_trip(trip_id)
                         if self.window and not self.alarm_engine.has_active_alarms():
                             self.window.after(0, self.window.dashboard.stop_alarm_blink)
+                elif message.startswith("Trip description updated to "):
+                    desc_text = message[len("Trip description updated to "):]
+                    desc_trip_id = self._extract_trip_id_from_topic(topic)
+                    if desc_trip_id and desc_text:
+                        log.info(f"TRIP DESCRIPTION [{desc_trip_id}]: {desc_text}")
+                        self.alarm_store.update_trip_description(desc_trip_id, desc_text)
+                        if self.window:
+                            self.window.after(0, lambda tid=desc_trip_id, d=desc_text: self.window.dashboard.update_card_description(tid, d))
 
         # trip_deleted → GELÖSCHT
         if payload is not None and payload.get("name") == "trip_deleted":

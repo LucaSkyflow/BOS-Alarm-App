@@ -128,6 +128,11 @@ class DashboardTab(ctk.CTkFrame):
         if card:
             card.update_status(status)
 
+    def update_card_description(self, trip_id: str, description: str):
+        card = self._card_map.get(trip_id)
+        if card:
+            card.update_description(description)
+
     def update_card_helicopter(self, trip_id: str, incoming: bool):
         card = self._card_map.get(trip_id)
         if card:

@@ -21,6 +21,7 @@ class AlarmRecord:
     organization: str
     incoming_helicopter: bool
     distance: float
+    description: str
     raw_json: str
     status: str = "active"
     source: str = "production"
@@ -66,6 +67,12 @@ class AlarmStore:
                 conn.commit()
             except sqlite3.OperationalError:
                 pass  # Column already exists
+            # Migration for description column
+            try:
+                conn.execute("ALTER TABLE alarms ADD COLUMN description TEXT NOT NULL DEFAULT ''")
+                conn.commit()
+            except sqlite3.OperationalError:
+                pass  # Column already exists
         finally:
             conn.close()
 
@@ -99,15 +106,16 @@ class AlarmStore:
         organization = trip.get("organization", {}).get("name", "")
         incoming_helicopter = bool(trip.get("incomingHelicopter", False))
         distance = float(trip.get("distance", 0))
+        description = trip.get("description", "")
 
         conn = self._connect()
         try:
             conn.execute(
                 """INSERT OR IGNORE INTO alarms
-                   (trip_id, timestamp, local_time, address, organization, incoming_helicopter, distance, raw_json, source)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                   (trip_id, timestamp, local_time, address, organization, incoming_helicopter, distance, raw_json, source, description)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (trip_id, timestamp, local_time, address, organization,
-                 int(incoming_helicopter), distance, raw, source),
+                 int(incoming_helicopter), distance, raw, source, description),
             )
             conn.commit()
             row = conn.execute("SELECT * FROM alarms WHERE trip_id = ?", (trip_id,)).fetchone()
@@ -197,6 +205,21 @@ class AlarmStore:
         finally:
             conn.close()
 
+    def update_trip_description(self, trip_id: str, description: str) -> bool:
+        conn = self._connect()
+        try:
+            cursor = conn.execute(
+                "UPDATE alarms SET description = ? WHERE trip_id = ?",
+                (description, trip_id),
+            )
+            conn.commit()
+            return cursor.rowcount > 0
+        except Exception as e:
+            log.error(f"Failed to update trip description: {e}")
+            return False
+        finally:
+            conn.close()
+
     def update_trip_status(self, trip_id: str, status: str) -> bool:
         conn = self._connect()
         try:
@@ -243,6 +266,7 @@ class AlarmStore:
             organization=row["organization"],
             incoming_helicopter=bool(row["incoming_helicopter"]),
             distance=row["distance"],
+            description=row["description"] if "description" in row.keys() else "",
             raw_json=row["raw_json"],
             status=row["status"],
             source=row["source"] if "source" in row.keys() else "production",

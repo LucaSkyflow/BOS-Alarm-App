@@ -70,10 +70,19 @@ class AlarmCard(ctk.CTkFrame):
         if record.incoming_helicopter:
             self._heli_label.pack(side="left", padx=(4, 0))
 
-        ctk.CTkLabel(
+        self._org_label = ctk.CTkLabel(
             row1, text=record.organization,
             font=FONT_BODY_BOLD, text_color=TEXT_PRIMARY, height=22,
-        ).pack(side="left", padx=(10, 0))
+        )
+        self._org_label.pack(side="left", padx=(10, 0))
+
+        description = getattr(record, "description", "") or ""
+        self._description_label = ctk.CTkLabel(
+            row1, text=f"\u00b7  {description}",
+            font=FONT_BODY_BOLD, text_color=YELLOW_HIGHLIGHT, height=22,
+        )
+        if description:
+            self._description_label.pack(side="left", padx=(8, 0))
 
         # Delete (rightmost)
         if self._on_delete:
@@ -140,6 +149,14 @@ class AlarmCard(ctk.CTkFrame):
         badge_text, badge_color = self._status_style(new_status)
         self._status_badge.configure(text=badge_text, fg_color=badge_color)
         self._accent_strip.configure(fg_color=badge_color)
+
+    def update_description(self, text: str):
+        if text:
+            self._description_label.configure(text=f"\u00b7  {text}")
+            self._description_label.pack(side="left", padx=(8, 0))
+            self._description_label.pack_configure(after=self._org_label)
+        else:
+            self._description_label.pack_forget()
 
     def update_helicopter(self, incoming: bool):
         if incoming:
