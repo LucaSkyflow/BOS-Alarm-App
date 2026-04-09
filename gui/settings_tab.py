@@ -48,6 +48,11 @@ class SettingsTab(ctk.CTkFrame):
         self._field(hue_card, "hue_bridge_ip", "Bridge IP")
         self._field(hue_card, "hue_username", "Username")
 
+        # ── Kasa ──
+        kasa_card = self._section(container, "Kasa Einstellungen")
+        self._switch_field(kasa_card, "kasa_enabled", "Kasa Smart Plug aktivieren")
+        self._field(kasa_card, "kasa_plug_ip", "Smart Plug IP-Adresse")
+
         # ── Alarm ──
         alarm_card = self._section(container, "Alarm Einstellungen")
         self._file_field(alarm_card, "alarm_wav_file", "WAV Datei")
@@ -195,6 +200,8 @@ class SettingsTab(ctk.CTkFrame):
         if key == "staging_enabled":
             self._staging_var = var
             self._staging_switch = switch
+        elif key == "kasa_enabled":
+            self._kasa_enabled_var = var
         elif key == "quit_password_enabled":
             self._quit_pw_enabled_var = var
             self._quit_pw_switch = switch
@@ -231,6 +238,7 @@ class SettingsTab(ctk.CTkFrame):
             data[key] = widget.get()
         data["staging_enabled"] = self._staging_var.get()
         data["staging_alarm_enabled"] = self._staging_alarm_var.get()
+        data["kasa_enabled"] = self._kasa_enabled_var.get()
         data["quit_password_enabled"] = self._quit_pw_enabled_var.get()
         return data
 
@@ -306,6 +314,7 @@ class SettingsTab(ctk.CTkFrame):
 
         data["staging_enabled"] = self._staging_var.get()
         data["staging_alarm_enabled"] = self._staging_alarm_var.get()
+        data["kasa_enabled"] = self._kasa_enabled_var.get()
         data["quit_password_enabled"] = self._quit_pw_enabled_var.get()
 
         self._settings.update(data)
@@ -327,6 +336,7 @@ class SettingsTab(ctk.CTkFrame):
         self._staging_var.set(self._settings.get("staging_enabled", False))
         self._staging_alarm_var.set(self._settings.get("staging_alarm_enabled", False))
         self._update_staging_alarm_state()
+        self._kasa_enabled_var.set(self._settings.get("kasa_enabled", False))
         self._quit_pw_enabled_var.set(self._settings.get("quit_password_enabled", True))
         self._update_quit_pw_state()
         self._take_snapshot()

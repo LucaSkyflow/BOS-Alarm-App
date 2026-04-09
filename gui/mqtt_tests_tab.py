@@ -13,12 +13,13 @@ MAX_FEED_ENTRIES = 500
 
 
 class MqttTestsTab(ctk.CTkFrame):
-    def __init__(self, parent, on_test_hue=None, on_test_sound=None, on_test_full_alarm=None, on_test_heli_sound=None):
+    def __init__(self, parent, on_test_hue=None, on_test_sound=None, on_test_full_alarm=None, on_test_heli_sound=None, on_test_kasa=None):
         super().__init__(parent, fg_color="transparent")
         self._on_test_hue = on_test_hue
         self._on_test_sound = on_test_sound
         self._on_test_full_alarm = on_test_full_alarm
         self._on_test_heli_sound = on_test_heli_sound
+        self._on_test_kasa = on_test_kasa
         self._feed_count = 0
         self._build_ui()
 
@@ -33,7 +34,7 @@ class MqttTestsTab(ctk.CTkFrame):
 
         btn_inner = ctk.CTkFrame(btn_card, fg_color="transparent")
         btn_inner.pack(fill="x", padx=PAD_INNER, pady=PAD_INNER)
-        for i in range(4):
+        for i in range(5):
             btn_inner.grid_columnconfigure(i, weight=1, uniform="btn")
 
         ctk.CTkButton(
@@ -43,22 +44,28 @@ class MqttTestsTab(ctk.CTkFrame):
         ).grid(row=0, column=0, padx=PAD_INNER // 2, sticky="ew")
 
         ctk.CTkButton(
-            btn_inner, text="\u266b  Test Sound", command=self._test_sound,
+            btn_inner, text="\u26a1  Test Kasa", command=self._test_kasa,
             height=BUTTON_HEIGHT, corner_radius=BUTTON_CORNER_RADIUS,
             fg_color=BTN_SECONDARY_FG, hover_color=BTN_SECONDARY_HOVER, font=FONT_BODY,
         ).grid(row=0, column=1, padx=PAD_INNER // 2, sticky="ew")
 
         ctk.CTkButton(
-            btn_inner, text="\u2708  Test Heli", command=self._test_heli_sound,
+            btn_inner, text="\u266b  Test Sound", command=self._test_sound,
             height=BUTTON_HEIGHT, corner_radius=BUTTON_CORNER_RADIUS,
             fg_color=BTN_SECONDARY_FG, hover_color=BTN_SECONDARY_HOVER, font=FONT_BODY,
         ).grid(row=0, column=2, padx=PAD_INNER // 2, sticky="ew")
 
         ctk.CTkButton(
+            btn_inner, text="\u2708  Test Heli", command=self._test_heli_sound,
+            height=BUTTON_HEIGHT, corner_radius=BUTTON_CORNER_RADIUS,
+            fg_color=BTN_SECONDARY_FG, hover_color=BTN_SECONDARY_HOVER, font=FONT_BODY,
+        ).grid(row=0, column=3, padx=PAD_INNER // 2, sticky="ew")
+
+        ctk.CTkButton(
             btn_inner, text="Vollst\u00e4ndiger Alarm", command=self._test_full_alarm,
             height=BUTTON_HEIGHT, corner_radius=BUTTON_CORNER_RADIUS,
             fg_color=RED_DANGER, hover_color=RED_DANGER_HOVER, font=FONT_BODY_BOLD,
-        ).grid(row=0, column=3, padx=PAD_INNER // 2, sticky="ew")
+        ).grid(row=0, column=4, padx=PAD_INNER // 2, sticky="ew")
 
         # ── Live MQTT Feed ──
         feed_header = ctk.CTkFrame(self, fg_color="transparent")
@@ -148,6 +155,10 @@ class MqttTestsTab(ctk.CTkFrame):
     def _test_heli_sound(self):
         if self._on_test_heli_sound:
             self._on_test_heli_sound()
+
+    def _test_kasa(self):
+        if self._on_test_kasa:
+            self._on_test_kasa()
 
     def _test_full_alarm(self):
         if self._on_test_full_alarm:

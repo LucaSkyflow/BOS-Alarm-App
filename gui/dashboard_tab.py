@@ -89,6 +89,9 @@ class DashboardTab(ctk.CTkFrame):
     def set_hue_status(self, reachable: bool):
         self.stats_panel.set_hue_status(reachable)
 
+    def set_kasa_status(self, reachable: bool):
+        self.stats_panel.set_kasa_status(reachable)
+
     # ── Alarm card management ──
 
     def load_history(self):

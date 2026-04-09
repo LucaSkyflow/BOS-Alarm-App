@@ -24,5 +24,7 @@
   "staging_enabled": false,
   "staging_alarm_enabled": true,
   "quit_password_enabled": false,
-  "helicopter_loop_count": 10
+  "helicopter_loop_count": 10,
+  "kasa_enabled": false,
+  "kasa_plug_ip": ""
 }

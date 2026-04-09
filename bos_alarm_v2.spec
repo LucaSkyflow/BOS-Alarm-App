@@ -24,6 +24,7 @@ a = Analysis(
         'pystray._win32',
         'PIL._tkinter_finder',
         'certifi',
+        'kasa',
     ],
     hookspath=[],
     hooksconfig={},

@@ -8,6 +8,7 @@ from settings_manager import SettingsManager
 from updater import check_for_update, download_and_apply
 from mqtt_client import MQTTManager
 from hue_controller import HueController
+from kasa_controller import KasaController
 from sound_player import SoundPlayer
 from alarm_engine import AlarmEngine
 from tray_manager import TrayManager
@@ -23,6 +24,7 @@ class App:
     def __init__(self):
         self.settings = SettingsManager()
         self.hue = HueController(self.settings)
+        self.kasa = KasaController(self.settings)
         self.sound = SoundPlayer(self.settings)
         self.alarm_store = AlarmStore()
         self.notifications = NotificationManager()
@@ -39,6 +41,7 @@ class App:
             sound=self.sound,
             tray=self.tray,
             on_alarm_triggered=self._on_alarm_triggered,
+            kasa=self.kasa,
         )
 
         # Dual MQTT: Production (always on) + Staging (optional)
@@ -85,6 +88,7 @@ class App:
             on_check_update=self._manual_update_check,
             on_test_heli_sound=self._test_heli_sound,
             on_volume_change=self._on_volume_change,
+            on_test_kasa=self._test_kasa,
         )
 
         # start tray
@@ -323,6 +327,14 @@ class App:
             except Exception:
                 pass
 
+            # Kasa plug status
+            try:
+                kasa_ok = self.kasa.is_reachable()
+                if self.window:
+                    self.window.after(0, lambda r=kasa_ok: self.window.dashboard.set_kasa_status(r))
+            except Exception:
+                pass
+
             # Production MQTT status
             try:
                 connected = self.mqtt_prod.is_connected()
@@ -370,6 +382,17 @@ class App:
     def _on_volume_change(self, level: float):
         self.sound.set_volume(level)
         self.settings.set("volume", level)
+
+    def _test_kasa(self):
+        def _run():
+            try:
+                self.kasa.turn_on()
+                import time
+                time.sleep(3)
+                self.kasa.turn_off()
+            except Exception as e:
+                log.error(f"Kasa test error: {e}")
+        threading.Thread(target=_run, daemon=True).start()
 
     def _test_heli_sound(self):
         self.sound.stop()
@@ -488,6 +511,10 @@ class App:
             pass
         try:
             self.mqtt_staging.disconnect()
+        except Exception:
+            pass
+        try:
+            self.kasa.stop()
         except Exception:
             pass
         try:

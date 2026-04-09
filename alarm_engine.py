@@ -7,11 +7,12 @@ log = logging.getLogger(__name__)
 
 
 class AlarmEngine:
-    def __init__(self, hue, sound, tray, on_alarm_triggered=None):
+    def __init__(self, hue, sound, tray, on_alarm_triggered=None, kasa=None):
         self._hue = hue
         self._sound = sound
         self._tray = tray
         self._on_alarm_triggered = on_alarm_triggered
+        self._kasa = kasa
         self._lock = threading.Lock()
         self._active: dict[str, threading.Event] = {}  # trip_id → stop_event
 
@@ -66,6 +67,15 @@ class AlarmEngine:
 
         threading.Thread(target=_run_hue, daemon=True).start()
 
+        def _run_kasa():
+            try:
+                self._kasa.alarm_on_then_off(stop_event)
+            except Exception as e:
+                log.error(f"Alarm Kasa error: {e}")
+
+        if self._kasa:
+            threading.Thread(target=_run_kasa, daemon=True).start()
+
     def stop_alarm_for_trip(self, trip_id: str):
         """Stoppt Alarm + Sound für einen bestimmten Einsatz."""
         with self._lock:
@@ -91,6 +101,11 @@ class AlarmEngine:
         for ev in events:
             ev.set()
         self._sound.stop()
+        if self._kasa:
+            try:
+                self._kasa.turn_off()
+            except Exception:
+                pass
 
     # ---------- helpers ----------
 

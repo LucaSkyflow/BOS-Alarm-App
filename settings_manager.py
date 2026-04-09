@@ -65,6 +65,8 @@ DEFAULTS = {
     "quit_password_enabled": False,
     "staging_enabled": False,
     "staging_alarm_enabled": False,
+    "kasa_enabled": False,
+    "kasa_plug_ip": "",
 }
 
 

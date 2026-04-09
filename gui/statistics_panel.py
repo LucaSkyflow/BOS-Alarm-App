@@ -53,6 +53,7 @@ class StatisticsPanel(ctk.CTkFrame):
         self._prod_dot, self.mqtt_prod_status = self._status_row(self._status_card, "Production", RED_DANGER, "Getrennt")
         self._stg_dot, self.mqtt_stg_status = self._status_row(self._status_card, "Staging", TEXT_TERTIARY, "Aus")
         self._hue_dot, self.hue_status = self._status_row(self._status_card, "Hue", TEXT_TERTIARY, "Unbekannt")
+        self._kasa_dot, self.kasa_status = self._status_row(self._status_card, "Kasa", TEXT_TERTIARY, "Unbekannt")
 
         # ── Top organizations row ──
         self._org_label = ctk.CTkLabel(
@@ -133,6 +134,14 @@ class StatisticsPanel(ctk.CTkFrame):
         else:
             self._hue_dot.configure(text_color=RED_DANGER)
             self.hue_status.configure(text="Hue: Nicht erreichbar")
+
+    def set_kasa_status(self, reachable: bool):
+        if reachable:
+            self._kasa_dot.configure(text_color=GREEN_CONNECTED)
+            self.kasa_status.configure(text="Kasa: Erreichbar")
+        else:
+            self._kasa_dot.configure(text_color=RED_DANGER)
+            self.kasa_status.configure(text="Kasa: Nicht erreichbar")
 
     # ── Public API: statistics refresh ──
 
