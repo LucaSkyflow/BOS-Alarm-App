@@ -70,7 +70,7 @@ DEFAULTS = {
     "keepalive_enabled": False,
     "keepalive_auto_start": False,
     "keepalive_audio_device": "",
-    "keepalive_interval_seconds": 120,
+    "keepalive_interval_seconds": 30,
 }
 
 

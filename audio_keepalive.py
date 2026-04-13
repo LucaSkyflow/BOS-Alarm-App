@@ -21,9 +21,9 @@ class AudioKeepAlive:
 
     # Signal parameters
     _SAMPLE_RATE = 44100
-    _DURATION_S = 0.1          # 100 ms
-    _FREQUENCY_HZ = 1.0        # 1 Hz  (well below audible range)
-    _AMPLITUDE = 0.001          # ~ -60 dBFS
+    _DURATION_S = 0.5           # 500 ms  (10 full cycles at 20 Hz)
+    _FREQUENCY_HZ = 20.0        # 20 Hz — lowest freq reliably reproduced by all audio HW / BT codecs
+    _AMPLITUDE = 0.005           # ~ -46 dBFS — imperceptible at 20 Hz but above HW noise floor
 
     def __init__(self, settings):
         self._settings = settings
@@ -129,7 +129,7 @@ class AudioKeepAlive:
                 self._last_error = str(e)
                 log.warning(f"Keep-Alive Signal-Fehler: {e}")
 
-            interval = int(self._settings.get("keepalive_interval_seconds", 120))
+            interval = int(self._settings.get("keepalive_interval_seconds", 30))
             interval = max(10, interval)
             self._stop_event.wait(timeout=interval)
 
@@ -140,6 +140,11 @@ class AudioKeepAlive:
         samples = int(self._SAMPLE_RATE * self._DURATION_S)
         t = np.linspace(0, self._DURATION_S, samples, endpoint=False, dtype=np.float32)
         signal = (self._AMPLITUDE * np.sin(2 * np.pi * self._FREQUENCY_HZ * t)).astype(np.float32)
+        # Fade-in / fade-out to avoid clicks (same approach as play_test_tone)
+        fade = int(self._SAMPLE_RATE * 0.02)
+        if fade > 0 and len(signal) > 2 * fade:
+            signal[:fade] *= np.linspace(0, 1, fade, dtype=np.float32)
+            signal[-fade:] *= np.linspace(1, 0, fade, dtype=np.float32)
 
         sd.play(signal, samplerate=self._SAMPLE_RATE, device=device_index)
         sd.wait()
