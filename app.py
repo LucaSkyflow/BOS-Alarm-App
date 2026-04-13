@@ -10,6 +10,7 @@ from mqtt_client import MQTTManager
 from hue_controller import HueController
 from kasa_controller import KasaController
 from sound_player import SoundPlayer
+from audio_keepalive import AudioKeepAlive
 from alarm_engine import AlarmEngine
 from tray_manager import TrayManager
 from alarm_store import AlarmStore
@@ -26,6 +27,7 @@ class App:
         self.hue = HueController(self.settings)
         self.kasa = KasaController(self.settings)
         self.sound = SoundPlayer(self.settings)
+        self.keepalive = AudioKeepAlive(self.settings)
         self.alarm_store = AlarmStore()
         self.notifications = NotificationManager()
 
@@ -89,6 +91,8 @@ class App:
             on_test_heli_sound=self._test_heli_sound,
             on_volume_change=self._on_volume_change,
             on_test_kasa=self._test_kasa,
+            on_keepalive_toggle=self._toggle_keepalive,
+            on_keepalive_test=self._test_keepalive_device,
         )
 
         # start tray
@@ -100,6 +104,11 @@ class App:
         # start health check thread
         self._health_stop.clear()
         threading.Thread(target=self._health_loop, daemon=True).start()
+
+        # Auto-start audio keep-alive if configured
+        if self.settings.get("keepalive_enabled", False) and self.settings.get("keepalive_auto_start", False):
+            self.keepalive.start()
+            self._update_keepalive_ui()
 
         # load alarm history from DB after GUI is ready
         self.window.after(100, self.window.dashboard.load_history)
@@ -355,6 +364,15 @@ class App:
             except Exception:
                 pass
 
+            # Audio Keep-Alive status
+            try:
+                running, detail = self.keepalive.get_status()
+                if self.window:
+                    self.window.after(0, lambda r=running, d=detail: self.window.dashboard.set_keepalive_status(r, d))
+                    self.window.after(0, lambda r=running, d=detail: self.window.settings_tab.set_keepalive_status(r, d))
+            except Exception:
+                pass
+
             self._health_stop.wait(15)
 
     # ---- GUI callbacks ----
@@ -393,6 +411,22 @@ class App:
             except Exception as e:
                 log.error(f"Kasa test error: {e}")
         threading.Thread(target=_run, daemon=True).start()
+
+    def _test_keepalive_device(self, device_name: str = ""):
+        threading.Thread(target=self.keepalive.play_test_tone, args=(device_name,), daemon=True).start()
+
+    def _toggle_keepalive(self):
+        if self.keepalive.is_running():
+            self.keepalive.stop()
+        else:
+            self.keepalive.start()
+        self._update_keepalive_ui()
+
+    def _update_keepalive_ui(self):
+        running, detail = self.keepalive.get_status()
+        if self.window:
+            self.window.after(0, lambda r=running, d=detail: self.window.dashboard.set_keepalive_status(r, d))
+            self.window.after(0, lambda r=running, d=detail: self.window.settings_tab.set_keepalive_status(r, d))
 
     def _test_heli_sound(self):
         self.sound.stop()
@@ -472,6 +506,12 @@ class App:
 
         self._start_mqtt()
 
+        # Restart keep-alive if it was running (device or interval may have changed)
+        if self.keepalive.is_running():
+            self.keepalive.stop()
+            self.keepalive.start()
+            self._update_keepalive_ui()
+
     def _quit(self):
         if self.window:
             self.window.after(0, self._quit_with_password)
@@ -501,6 +541,10 @@ class App:
     def _do_quit(self):
         log.info("Quitting application")
         self._health_stop.set()
+        try:
+            self.keepalive.stop()
+        except Exception:
+            pass
         try:
             self.alarm_engine.stop()
         except Exception:

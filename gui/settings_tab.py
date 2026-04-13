@@ -17,12 +17,14 @@ from gui.theme import (
 
 
 class SettingsTab(ctk.CTkFrame):
-    def __init__(self, parent, settings, on_apply=None, on_reset_statistics=None, on_check_update=None):
+    def __init__(self, parent, settings, on_apply=None, on_reset_statistics=None, on_check_update=None, on_keepalive_toggle=None, on_keepalive_test=None):
         super().__init__(parent, fg_color="transparent")
         self._settings = settings
         self._on_apply = on_apply
         self._on_reset_statistics = on_reset_statistics
         self._on_check_update = on_check_update
+        self._on_keepalive_toggle = on_keepalive_toggle
+        self._on_keepalive_test = on_keepalive_test
         self._entries: dict[str, ctk.CTkEntry | ctk.CTkCheckBox] = {}
         self._saved_snapshot: dict = {}
         self._build_ui()
@@ -65,6 +67,30 @@ class SettingsTab(ctk.CTkFrame):
         self._field(alarm_card, "blink_interval", "Blink-Intervall (Sek.)")
         self._field(alarm_card, "off_delay", "Off-Delay (Sek.)")
         self._field(alarm_card, "dashboard_blink_interval", "Dashboard Blink-Intervall (Sek.)")
+
+        # ── Audio Keep-Alive ──
+        ka_card = self._section(container, "Audio Keep-Alive")
+        self._switch_field(ka_card, "keepalive_enabled", "Keep-Alive aktivieren")
+        self._switch_field(ka_card, "keepalive_auto_start", "Automatisch starten bei App-Start")
+        self._dropdown_field(ka_card, "keepalive_audio_device", "Audio-Ausgabeger\u00e4t")
+        self._field(ka_card, "keepalive_interval_seconds", "Intervall (Sekunden)")
+
+        # Start/Stop button + status (immediate action, independent of Apply)
+        ka_ctrl = ctk.CTkFrame(ka_card, fg_color="transparent")
+        ka_ctrl.pack(fill="x", padx=PAD_CARD_INTERNAL, pady=(0, PAD_CARD_INTERNAL))
+
+        self._ka_toggle_btn = ctk.CTkButton(
+            ka_ctrl, text="Start", width=120,
+            corner_radius=BUTTON_CORNER_RADIUS, height=BUTTON_HEIGHT,
+            fg_color=ACCENT_BLUE, hover_color=ACCENT_BLUE_HOVER, font=FONT_BODY,
+            command=self._toggle_keepalive,
+        )
+        self._ka_toggle_btn.pack(side="left")
+
+        self._ka_status_label = ctk.CTkLabel(
+            ka_ctrl, text="Gestoppt", font=FONT_SMALL, text_color=TEXT_TERTIARY, anchor="w",
+        )
+        self._ka_status_label.pack(side="left", padx=(PAD_INNER, 0), fill="x", expand=True)
 
         # ── Sicherheit ──
         sec_card = self._section(container, "Sicherheit")
@@ -205,6 +231,10 @@ class SettingsTab(ctk.CTkFrame):
         elif key == "quit_password_enabled":
             self._quit_pw_enabled_var = var
             self._quit_pw_switch = switch
+        elif key == "keepalive_enabled":
+            self._keepalive_enabled_var = var
+        elif key == "keepalive_auto_start":
+            self._keepalive_auto_start_var = var
 
     def _checkbox_field(self, parent_card, key: str, label: str):
         wrapper = ctk.CTkFrame(parent_card, fg_color="transparent")
@@ -223,6 +253,65 @@ class SettingsTab(ctk.CTkFrame):
             self._staging_alarm_cb = cb
             self._update_staging_alarm_state()
 
+    def _dropdown_field(self, parent_card, key: str, label: str):
+        from audio_keepalive import AudioKeepAlive
+
+        wrapper = ctk.CTkFrame(parent_card, fg_color="transparent")
+        wrapper.pack(fill="x", padx=PAD_CARD_INTERNAL, pady=(0, PAD_INNER))
+
+        ctk.CTkLabel(
+            wrapper, text=label, font=FONT_SMALL, text_color=TEXT_SECONDARY, anchor="w",
+        ).pack(anchor="w", pady=(0, PAD_TIGHT))
+
+        row = ctk.CTkFrame(wrapper, fg_color="transparent")
+        row.pack(fill="x")
+
+        choices = AudioKeepAlive.query_output_devices()
+        current = str(self._settings.get(key, ""))
+        if current and current not in choices:
+            choices.append(current)
+        display = current if current else choices[0]
+
+        dropdown = ctk.CTkOptionMenu(
+            row, values=choices, font=FONT_BODY, height=38,
+            corner_radius=ENTRY_CORNER_RADIUS,
+            command=lambda _v: self._on_change(),
+        )
+        dropdown.set(display)
+        dropdown.pack(side="left", fill="x", expand=True)
+        self._entries[key] = dropdown
+
+        def _refresh():
+            new_choices = AudioKeepAlive.query_output_devices()
+            dropdown.configure(values=new_choices)
+
+        ctk.CTkButton(
+            row, text="Aktualisieren", width=110, height=38,
+            corner_radius=BUTTON_CORNER_RADIUS,
+            fg_color=BTN_SECONDARY_FG, hover_color=BTN_SECONDARY_HOVER,
+            font=FONT_BODY,
+            command=_refresh,
+        ).pack(side="left", padx=(PAD_INNER, 0))
+
+        ctk.CTkButton(
+            row, text="Test", width=60, height=38,
+            corner_radius=BUTTON_CORNER_RADIUS,
+            fg_color=ACCENT_BLUE, hover_color=ACCENT_BLUE_HOVER,
+            font=FONT_BODY,
+            command=self._test_keepalive_device,
+        ).pack(side="left", padx=(PAD_INNER, 0))
+
+    def _toggle_keepalive(self):
+        if self._on_keepalive_toggle:
+            self._on_keepalive_toggle()
+
+    def _test_keepalive_device(self):
+        if self._on_keepalive_test:
+            device = self._entries["keepalive_audio_device"].get()
+            if device.startswith("Standard"):
+                device = ""
+            self._on_keepalive_test(device)
+
     def _browse_file(self, entry: ctk.CTkEntry, filetypes):
         path = filedialog.askopenfilename(filetypes=filetypes)
         if path:
@@ -240,6 +329,8 @@ class SettingsTab(ctk.CTkFrame):
         data["staging_alarm_enabled"] = self._staging_alarm_var.get()
         data["kasa_enabled"] = self._kasa_enabled_var.get()
         data["quit_password_enabled"] = self._quit_pw_enabled_var.get()
+        data["keepalive_enabled"] = self._keepalive_enabled_var.get()
+        data["keepalive_auto_start"] = self._keepalive_auto_start_var.get()
         return data
 
     def _take_snapshot(self):
@@ -294,6 +385,14 @@ class SettingsTab(ctk.CTkFrame):
     def set_update_status(self, text, color="#aaaaaa"):
         self._update_status_label.configure(text=text, text_color=color)
 
+    def set_keepalive_status(self, running: bool, detail: str = ""):
+        if running:
+            self._ka_toggle_btn.configure(text="Stop", fg_color=RED_DANGER, hover_color=RED_DANGER_HOVER)
+            self._ka_status_label.configure(text=detail or "Aktiv", text_color=TEXT_PRIMARY)
+        else:
+            self._ka_toggle_btn.configure(text="Start", fg_color=ACCENT_BLUE, hover_color=ACCENT_BLUE_HOVER)
+            self._ka_status_label.configure(text=detail or "Gestoppt", text_color=TEXT_TERTIARY)
+
     def _apply(self):
         data = {}
         for key, widget in self._entries.items():
@@ -312,10 +411,24 @@ class SettingsTab(ctk.CTkFrame):
                 except ValueError:
                     pass
 
+        if "keepalive_interval_seconds" in data:
+            try:
+                data["keepalive_interval_seconds"] = max(10, int(data["keepalive_interval_seconds"]))
+            except ValueError:
+                pass
+
+        # Handle dropdown value: map "Standard (Windows-Standard)" back to ""
+        if "keepalive_audio_device" in data:
+            val = data["keepalive_audio_device"]
+            if val.startswith("Standard"):
+                data["keepalive_audio_device"] = ""
+
         data["staging_enabled"] = self._staging_var.get()
         data["staging_alarm_enabled"] = self._staging_alarm_var.get()
         data["kasa_enabled"] = self._kasa_enabled_var.get()
         data["quit_password_enabled"] = self._quit_pw_enabled_var.get()
+        data["keepalive_enabled"] = self._keepalive_enabled_var.get()
+        data["keepalive_auto_start"] = self._keepalive_auto_start_var.get()
 
         self._settings.update(data)
 
@@ -339,5 +452,10 @@ class SettingsTab(ctk.CTkFrame):
         self._kasa_enabled_var.set(self._settings.get("kasa_enabled", False))
         self._quit_pw_enabled_var.set(self._settings.get("quit_password_enabled", True))
         self._update_quit_pw_state()
+        self._keepalive_enabled_var.set(self._settings.get("keepalive_enabled", False))
+        self._keepalive_auto_start_var.set(self._settings.get("keepalive_auto_start", False))
+        # Refresh dropdown value
+        device = self._settings.get("keepalive_audio_device", "")
+        self._entries["keepalive_audio_device"].set(device if device else "Standard (Windows-Standard)")
         self._take_snapshot()
         self._on_change()

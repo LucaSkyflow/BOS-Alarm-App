@@ -92,6 +92,9 @@ class DashboardTab(ctk.CTkFrame):
     def set_kasa_status(self, reachable: bool):
         self.stats_panel.set_kasa_status(reachable)
 
+    def set_keepalive_status(self, active: bool, detail: str = ""):
+        self.stats_panel.set_keepalive_status(active, detail)
+
     # ── Alarm card management ──
 
     def load_history(self):

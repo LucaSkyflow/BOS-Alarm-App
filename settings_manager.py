@@ -67,6 +67,10 @@ DEFAULTS = {
     "staging_alarm_enabled": False,
     "kasa_enabled": False,
     "kasa_plug_ip": "",
+    "keepalive_enabled": False,
+    "keepalive_auto_start": False,
+    "keepalive_audio_device": "",
+    "keepalive_interval_seconds": 120,
 }
 
 

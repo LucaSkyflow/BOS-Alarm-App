@@ -54,6 +54,7 @@ class StatisticsPanel(ctk.CTkFrame):
         self._stg_dot, self.mqtt_stg_status = self._status_row(self._status_card, "Staging", TEXT_TERTIARY, "Aus")
         self._hue_dot, self.hue_status = self._status_row(self._status_card, "Hue", TEXT_TERTIARY, "Unbekannt")
         self._kasa_dot, self.kasa_status = self._status_row(self._status_card, "Kasa", TEXT_TERTIARY, "Unbekannt")
+        self._ka_dot, self._ka_status = self._status_row(self._status_card, "Keep-Alive", TEXT_TERTIARY, "Aus")
 
         # ── Top organizations row ──
         self._org_label = ctk.CTkLabel(
@@ -142,6 +143,15 @@ class StatisticsPanel(ctk.CTkFrame):
         else:
             self._kasa_dot.configure(text_color=RED_DANGER)
             self.kasa_status.configure(text="Kasa: Nicht erreichbar")
+
+    def set_keepalive_status(self, active: bool, detail: str = ""):
+        if active:
+            self._ka_dot.configure(text_color=GREEN_CONNECTED)
+            text = f"Keep-Alive: {detail}" if detail else "Keep-Alive: Aktiv"
+        else:
+            self._ka_dot.configure(text_color=TEXT_TERTIARY)
+            text = f"Keep-Alive: {detail}" if detail else "Keep-Alive: Aus"
+        self._ka_status.configure(text=text)
 
     # ── Public API: statistics refresh ──
 

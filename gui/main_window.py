@@ -10,7 +10,7 @@ from version import VERSION
 
 
 class MainWindow(ctk.CTk):
-    def __init__(self, settings, alarm_store, on_test_hue=None, on_test_sound=None, on_apply_settings=None, on_quit=None, on_reset_statistics=None, on_test_full_alarm=None, on_finish_trip=None, on_check_update=None, on_test_heli_sound=None, on_volume_change=None, on_test_kasa=None):
+    def __init__(self, settings, alarm_store, on_test_hue=None, on_test_sound=None, on_apply_settings=None, on_quit=None, on_reset_statistics=None, on_test_full_alarm=None, on_finish_trip=None, on_check_update=None, on_test_heli_sound=None, on_volume_change=None, on_test_kasa=None, on_keepalive_toggle=None, on_keepalive_test=None):
         super().__init__()
 
         self.title(f"BOS Alarm \u2014 v{VERSION}")
@@ -67,6 +67,8 @@ class MainWindow(ctk.CTk):
             on_apply=on_apply_settings,
             on_reset_statistics=on_reset_statistics,
             on_check_update=on_check_update,
+            on_keepalive_toggle=on_keepalive_toggle,
+            on_keepalive_test=on_keepalive_test,
         )
 
         self._pages = {
