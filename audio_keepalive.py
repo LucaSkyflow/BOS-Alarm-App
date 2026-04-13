@@ -115,6 +115,12 @@ class AudioKeepAlive:
         if not _SD_AVAILABLE:
             log.warning("Test-Ton nicht moeglich: sounddevice/numpy nicht verfuegbar.")
             return
+        # Pause keep-alive stream so sd.play() can use the same device
+        was_streaming = False
+        with self._lock:
+            if self._stream is not None:
+                was_streaming = True
+                self._close_stream_unlocked()
         try:
             device_index = self._resolve_device(device_name)
             duration = 0.4
@@ -131,6 +137,9 @@ class AudioKeepAlive:
             log.info(f"Test-Ton abgespielt (device={device_name or 'Standard'})")
         except Exception as e:
             log.error(f"Test-Ton Fehler: {e}")
+        finally:
+            if was_streaming and self._running:
+                self._open_stream()
 
     # ── internal: stream lifecycle ──
 
