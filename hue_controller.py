@@ -79,7 +79,6 @@ class HueController:
         self._put("/groups/0/action", {"on": True, "bri": 254, "hue": 0, "sat": 254, "transitiontime": 0})
 
     def alarm_blink_then_restore(self, stop_event):
-        light_seconds = float(self._settings.get("alarm_light_seconds", 20.0))
         blink_interval = float(self._settings.get("blink_interval", 0.8))
         off_delay = float(self._settings.get("off_delay", 0.3))
 
@@ -93,9 +92,8 @@ class HueController:
             self.set_group_off()
             time.sleep(off_delay)
 
-            end = time.time() + light_seconds
             is_on = False
-            while time.time() < end and not stop_event.is_set():
+            while not stop_event.is_set():
                 is_on = not is_on
                 if is_on:
                     self.set_group_on_red_full()

@@ -162,11 +162,15 @@ class DashboardTab(ctk.CTkFrame):
         if self._alarm_blink_active:
             return
         self._alarm_blink_active = True
-        duration = self._settings.get("alarm_light_seconds", 20.0)
         # Show banner between volume row and history header
         self._alarm_banner.pack(fill="x", padx=PAD_PAGE, pady=(0, PAD_INNER), after=self._vol_frame)
         self._blink_tick()
-        self._alarm_blink_stop_job = self.after(int(float(duration) * 1000), self.stop_alarm_blink)
+
+    def schedule_alarm_blink_stop(self, delay_seconds: float):
+        """Banner-Stopp nach Nachlaufzeit einplanen."""
+        if self._alarm_blink_stop_job:
+            self.after_cancel(self._alarm_blink_stop_job)
+        self._alarm_blink_stop_job = self.after(int(delay_seconds * 1000), self.stop_alarm_blink)
 
     def _blink_tick(self):
         if not self._alarm_blink_active:

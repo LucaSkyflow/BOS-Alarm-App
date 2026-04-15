@@ -7,15 +7,19 @@ log = logging.getLogger(__name__)
 
 
 class AlarmEngine:
-    def __init__(self, hue, sound, tray, on_alarm_triggered=None, kasa=None):
+    def __init__(self, hue, sound, tray, on_alarm_triggered=None, kasa=None,
+                 settings=None, on_all_alarms_cleared=None):
         self._hue = hue
         self._sound = sound
         self._tray = tray
         self._on_alarm_triggered = on_alarm_triggered
+        self._on_all_alarms_cleared = on_all_alarms_cleared
         self._kasa = kasa
+        self._settings = settings
         self._lock = threading.Lock()
         self._active: dict[str, threading.Event] = {}  # trip_id → stop_event
         self._sound_active: set = set()  # trip_ids mit aktivem Alarm-Ton
+        self._nachlauf_timers: dict[str, threading.Timer] = {}  # trip_id → Nachlauf-Timer
 
     # ---------- public API ----------
 
@@ -51,10 +55,8 @@ class AlarmEngine:
             self._tray.set_color("red")
 
         def _run_hue():
-            hue_ok = False
             try:
                 self._hue.alarm_blink_then_restore(stop_event)
-                hue_ok = True
             except Exception as e:
                 log.error(f"Alarm Hue error: {e}")
             finally:
@@ -81,11 +83,16 @@ class AlarmEngine:
         Args:
             trip_id: Trip-ID des Einsatzes.
             sound_only: Wenn True, wird nur der Ton gestoppt;
-                        Lichter/Plug laufen für alarm_light_seconds weiter.
+                        Lichter/Plug laufen noch für alarm_light_seconds
+                        (Nachlaufzeit) weiter, bevor sie ebenfalls stoppen.
         """
         with self._lock:
             if not sound_only:
                 stop_event = self._active.pop(trip_id, None)
+                # Nachlauf-Timer abbrechen falls vorhanden
+                timer = self._nachlauf_timers.pop(trip_id, None)
+                if timer:
+                    timer.cancel()
             else:
                 stop_event = None
             self._sound_active.discard(trip_id)
@@ -95,7 +102,36 @@ class AlarmEngine:
         self._sound.stop()
         if not still_active and self._tray:
             self._tray.set_color("green")
-        log.info(f"{'Sound' if sound_only else 'Alarm'} for trip {trip_id} stopped.")
+
+        if sound_only:
+            # Nachlauf-Timer: nach alarm_light_seconds alles stoppen
+            nachlauf = 20.0
+            if self._settings:
+                nachlauf = float(self._settings.get("alarm_light_seconds", 20.0))
+            timer = threading.Timer(nachlauf, self._finish_nachlauf, args=(trip_id,))
+            timer.daemon = True
+            timer.start()
+            with self._lock:
+                self._nachlauf_timers[trip_id] = timer
+            log.info(f"Sound for trip {trip_id} stopped; Nachlaufzeit {nachlauf}s gestartet.")
+        else:
+            log.info(f"Alarm for trip {trip_id} stopped.")
+            if not still_active and self._on_all_alarms_cleared:
+                self._on_all_alarms_cleared()
+
+    def _finish_nachlauf(self, trip_id: str):
+        """Wird nach Ablauf der Nachlaufzeit aufgerufen – stoppt Lichter/Plug."""
+        with self._lock:
+            stop_event = self._active.pop(trip_id, None)
+            self._nachlauf_timers.pop(trip_id, None)
+            still_active = bool(self._active) or bool(self._sound_active)
+        if stop_event:
+            stop_event.set()
+        if not still_active and self._tray:
+            self._tray.set_color("green")
+        log.info(f"Nachlaufzeit for trip {trip_id} ended.")
+        if not still_active and self._on_all_alarms_cleared:
+            self._on_all_alarms_cleared()
 
     def has_active_alarms(self) -> bool:
         with self._lock:
@@ -106,6 +142,9 @@ class AlarmEngine:
         with self._lock:
             events = list(self._active.values())
             self._sound_active.clear()
+            for timer in self._nachlauf_timers.values():
+                timer.cancel()
+            self._nachlauf_timers.clear()
         for ev in events:
             ev.set()
         self._sound.stop()

@@ -44,6 +44,8 @@ class App:
             tray=self.tray,
             on_alarm_triggered=self._on_alarm_triggered,
             kasa=self.kasa,
+            settings=self.settings,
+            on_all_alarms_cleared=self._on_all_alarms_cleared,
         )
 
         # Dual MQTT: Production (always on) + Staging (optional)
@@ -323,6 +325,11 @@ class App:
     # ---- Alarm triggered callback ----
     def _on_alarm_triggered(self, topic: str, payload: dict | None, raw: str):
         log.info(f"Alarm triggered: {topic}")
+
+    def _on_all_alarms_cleared(self):
+        """Callback: alle Alarme (inkl. Nachlaufzeit) sind beendet."""
+        if self.window:
+            self.window.after(0, self.window.dashboard.stop_alarm_blink)
 
     def _on_finish_trip(self, trip_id: str):
         self.alarm_store.update_trip_status(trip_id, "finished")

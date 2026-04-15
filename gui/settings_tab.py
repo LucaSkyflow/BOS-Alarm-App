@@ -63,7 +63,7 @@ class SettingsTab(ctk.CTkFrame):
             filetypes=[("Audio files", "*.wav *.mp3"), ("WAV files", "*.wav"), ("MP3 files", "*.mp3"), ("All files", "*.*")]
         )
         self._field(alarm_card, "helicopter_loop_count", "Helikopter Loops")
-        self._field(alarm_card, "alarm_light_seconds", "Dauer (Sekunden)")
+        self._field(alarm_card, "alarm_light_seconds", "Nachlaufzeit (Sekunden)")
         self._field(alarm_card, "blink_interval", "Blink-Intervall (Sek.)")
         self._field(alarm_card, "off_delay", "Off-Delay (Sek.)")
         self._field(alarm_card, "dashboard_blink_interval", "Dashboard Blink-Intervall (Sek.)")

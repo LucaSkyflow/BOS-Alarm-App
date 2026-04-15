@@ -62,8 +62,7 @@ class KasaController:
             return
         try:
             self.turn_on()
-            light_seconds = float(self._settings.get("alarm_light_seconds", 20.0))
-            stop_event.wait(timeout=light_seconds)
+            stop_event.wait()  # bis Alarm beendet + Nachlaufzeit abgelaufen
         except Exception as e:
             log.error(f"Kasa alarm_on error: {e}")
         finally:
