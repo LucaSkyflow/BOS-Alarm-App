@@ -23,8 +23,8 @@ class SoundPlayer:
         self._loop_timer: threading.Timer | None = None
         self._stop_event: threading.Event | None = None
 
-    def play_alarm(self):
-        log.debug("play_alarm() called")
+    def play_alarm(self, loop=False):
+        log.debug(f"play_alarm() called (loop={loop})")
         wav = self._settings.wav_path()
         if not os.path.exists(wav):
             log.warning(f"Alarm WAV not found: {wav}")
@@ -39,8 +39,8 @@ class SoundPlayer:
                 vol = float(self._settings.get("volume", 0.8))
                 pygame.mixer.music.set_volume(vol)
                 pygame.mixer.music.load(wav)
-                pygame.mixer.music.play()
-                log.debug(f"pygame alarm playback started (vol={vol})")
+                pygame.mixer.music.play(loops=-1 if loop else 0)
+                log.debug(f"pygame alarm playback started (vol={vol}, loop={loop})")
                 return
             except Exception as e:
                 log.warning(f"pygame alarm fallback: {e}")
@@ -49,30 +49,47 @@ class SoundPlayer:
         if winsound is None:
             log.warning("winsound not available on this platform.")
             return
-        try:
-            winsound.PlaySound(wav, winsound.SND_FILENAME | winsound.SND_ASYNC)
-        except Exception as e:
-            log.error(f"WAV sound error: {e}")
-            return
-        duration = self._get_wav_duration(wav)
-        if duration:
-            self._loop_timer = threading.Timer(duration, self.stop)
-            self._loop_timer.daemon = True
-            self._loop_timer.start()
 
-    def play_helicopter_alarm(self):
-        log.debug("play_helicopter_alarm() called")
+        if loop:
+            self._stop_event = threading.Event()
+            stop_ev = self._stop_event
+
+            def _loop():
+                log.debug("winsound alarm loop starting")
+                while not stop_ev.is_set():
+                    try:
+                        winsound.PlaySound(wav, winsound.SND_FILENAME)
+                    except Exception as e:
+                        log.error(f"WAV loop error: {e}")
+                        break
+                log.debug("winsound alarm loop ended")
+
+            threading.Thread(target=_loop, daemon=True).start()
+        else:
+            try:
+                winsound.PlaySound(wav, winsound.SND_FILENAME | winsound.SND_ASYNC)
+            except Exception as e:
+                log.error(f"WAV sound error: {e}")
+                return
+            duration = self._get_wav_duration(wav)
+            if duration:
+                self._loop_timer = threading.Timer(duration, self.stop)
+                self._loop_timer.daemon = True
+                self._loop_timer.start()
+
+    def play_helicopter_alarm(self, loop=False):
+        log.debug(f"play_helicopter_alarm() called (loop={loop})")
         raw = self._settings.get("alarm_wav_helicopter", "")
         if not raw:
             log.warning("Kein Helikopter-Audio konfiguriert – Fallback auf Normal-Alarm.")
-            self.play_alarm()
+            self.play_alarm(loop=loop)
             return
 
         wav = self._settings.wav_helicopter_path()
         log.debug(f"Helicopter WAV path resolved: {wav!r}")
         if not os.path.exists(wav):
             log.warning("Helicopter audio not found, falling back to normal alarm.")
-            self.play_alarm()
+            self.play_alarm(loop=loop)
             return
 
         ext = os.path.splitext(wav)[1].lower()
@@ -99,17 +116,17 @@ class SoundPlayer:
                 vol = float(self._settings.get("volume", 0.8))
                 _pg.mixer.music.set_volume(vol)
                 _pg.mixer.music.load(wav)
-                _pg.mixer.music.play(loops=loop_count - 1)
+                _pg.mixer.music.play(loops=-1 if loop else loop_count - 1)
                 log.debug("pygame.mixer.music.play() called successfully")
             except Exception as e:
                 log.error(f"pygame playback error: {e}")
-                self.play_alarm()
+                self.play_alarm(loop=loop)
                 return
         else:
             log.debug("pygame not available or ext not supported – using winsound fallback")
             if ext == ".mp3":
                 log.error("pygame nicht verfügbar – MP3 kann nicht über winsound abgespielt werden. Falle zurück auf Normal-Alarm.")
-                self.play_alarm()
+                self.play_alarm(loop=loop)
                 return
             # WAV fallback via winsound mit N-Loop-Thread
             if winsound is None:
@@ -120,17 +137,26 @@ class SoundPlayer:
             stop_ev = self._stop_event
 
             def _loop():
-                log.debug(f"winsound loop starting: {loop_count} iterations")
-                for i in range(loop_count):
-                    if stop_ev.is_set():
-                        log.debug(f"winsound loop stopped at iteration {i}")
-                        break
-                    try:
-                        winsound.PlaySound(wav, winsound.SND_FILENAME)
-                        log.debug(f"winsound iteration {i+1}/{loop_count} done")
-                    except Exception as e:
-                        log.error(f"WAV loop error: {e}")
-                        break
+                if loop:
+                    log.debug("winsound helicopter loop starting (infinite)")
+                    while not stop_ev.is_set():
+                        try:
+                            winsound.PlaySound(wav, winsound.SND_FILENAME)
+                        except Exception as e:
+                            log.error(f"WAV loop error: {e}")
+                            break
+                else:
+                    log.debug(f"winsound loop starting: {loop_count} iterations")
+                    for i in range(loop_count):
+                        if stop_ev.is_set():
+                            log.debug(f"winsound loop stopped at iteration {i}")
+                            break
+                        try:
+                            winsound.PlaySound(wav, winsound.SND_FILENAME)
+                            log.debug(f"winsound iteration {i+1}/{loop_count} done")
+                        except Exception as e:
+                            log.error(f"WAV loop error: {e}")
+                            break
 
             threading.Thread(target=_loop, daemon=True).start()
 

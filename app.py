@@ -174,7 +174,7 @@ class App:
                     self.alarm_store.update_trip_description(trip_id, desc)
                     if self.window:
                         self.window.after(0, lambda tid=trip_id, d=desc: self.window.dashboard.update_card_description(tid, d))
-                self.alarm_engine.stop_alarm_for_trip(trip_id)
+                self.alarm_engine.stop_alarm_for_trip(trip_id, sound_only=True)
                 if self.window and not self.alarm_engine.has_active_alarms():
                     self.window.after(0, self.window.dashboard.stop_alarm_blink)
 
@@ -206,7 +206,7 @@ class App:
                     self.alarm_store.update_trip_status(trip_id, "confirmed")
                     if self.window:
                         self.window.after(0, lambda tid=trip_id: self.window.dashboard.update_card_status(tid, "confirmed"))
-                    self.alarm_engine.stop_alarm_for_trip(trip_id)
+                    self.alarm_engine.stop_alarm_for_trip(trip_id, sound_only=True)
                     if self.window and not self.alarm_engine.has_active_alarms():
                         self.window.after(0, self.window.dashboard.stop_alarm_blink)
             elif trip.get("status") == "IN_PROGRESS":
@@ -283,6 +283,9 @@ class App:
                 self.alarm_store.update_trip_status(trip_id, "deleted")
                 if self.window:
                     self.window.after(0, lambda tid=trip_id: self.window.dashboard.update_card_status(tid, "deleted"))
+                self.alarm_engine.stop_alarm_for_trip(trip_id)
+                if self.window and not self.alarm_engine.has_active_alarms():
+                    self.window.after(0, self.window.dashboard.stop_alarm_blink)
 
         # Return command: command_request_executed with value == "RETURN"
         if payload is not None and payload.get("name") == "command_request_executed":

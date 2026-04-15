@@ -15,6 +15,7 @@ class AlarmEngine:
         self._kasa = kasa
         self._lock = threading.Lock()
         self._active: dict[str, threading.Event] = {}  # trip_id → stop_event
+        self._sound_active: set = set()  # trip_ids mit aktivem Alarm-Ton
 
     # ---------- public API ----------
 
@@ -34,6 +35,7 @@ class AlarmEngine:
                 return
             stop_event = threading.Event()
             self._active[trip_id] = stop_event
+            self._sound_active.add(trip_id)
 
         if self._on_alarm_triggered:
             self._on_alarm_triggered(topic, payload, raw)
@@ -41,9 +43,9 @@ class AlarmEngine:
         incoming_helicopter = bool((payload or {}).get("trip", {}).get("incomingHelicopter", False))
 
         if incoming_helicopter:
-            threading.Thread(target=self._sound.play_helicopter_alarm, daemon=True).start()
+            threading.Thread(target=lambda: self._sound.play_helicopter_alarm(loop=True), daemon=True).start()
         else:
-            threading.Thread(target=self._sound.play_alarm, daemon=True).start()
+            threading.Thread(target=lambda: self._sound.play_alarm(loop=True), daemon=True).start()
 
         if self._tray:
             self._tray.set_color("red")
@@ -58,12 +60,9 @@ class AlarmEngine:
             finally:
                 with self._lock:
                     self._active.pop(trip_id, None)
-                    still_active = bool(self._active)
-                if not still_active:
-                    if hue_ok and not incoming_helicopter:
-                        self._sound.stop()
-                    if self._tray:
-                        self._tray.set_color("green")
+                    still_active = bool(self._active) or bool(self._sound_active)
+                if not still_active and self._tray:
+                    self._tray.set_color("green")
 
         threading.Thread(target=_run_hue, daemon=True).start()
 
@@ -76,28 +75,37 @@ class AlarmEngine:
         if self._kasa:
             threading.Thread(target=_run_kasa, daemon=True).start()
 
-    def stop_alarm_for_trip(self, trip_id: str):
-        """Stoppt Alarm + Sound für einen bestimmten Einsatz."""
+    def stop_alarm_for_trip(self, trip_id: str, sound_only: bool = False):
+        """Stoppt Alarm für einen bestimmten Einsatz.
+
+        Args:
+            trip_id: Trip-ID des Einsatzes.
+            sound_only: Wenn True, wird nur der Ton gestoppt;
+                        Lichter/Plug laufen für alarm_light_seconds weiter.
+        """
         with self._lock:
-            stop_event = self._active.pop(trip_id, None)  # sofort entfernen
-            still_active = bool(self._active)
+            if not sound_only:
+                stop_event = self._active.pop(trip_id, None)
+            else:
+                stop_event = None
+            self._sound_active.discard(trip_id)
+            still_active = bool(self._active) or bool(self._sound_active)
         if stop_event:
             stop_event.set()
-            self._sound.stop()
-            log.info(f"Alarm for trip {trip_id} stopped.")
-            if not still_active and self._tray:
-                self._tray.set_color("green")
-        else:
-            log.debug(f"No active alarm for trip {trip_id}.")
+        self._sound.stop()
+        if not still_active and self._tray:
+            self._tray.set_color("green")
+        log.info(f"{'Sound' if sound_only else 'Alarm'} for trip {trip_id} stopped.")
 
     def has_active_alarms(self) -> bool:
         with self._lock:
-            return bool(self._active)
+            return bool(self._active) or bool(self._sound_active)
 
     def stop(self):
         """Alle Alarme stoppen (z.B. beim Beenden der App)."""
         with self._lock:
             events = list(self._active.values())
+            self._sound_active.clear()
         for ev in events:
             ev.set()
         self._sound.stop()
