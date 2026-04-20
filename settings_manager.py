@@ -71,6 +71,7 @@ DEFAULTS = {
     "keepalive_auto_start": False,
     "keepalive_audio_device": "",
     "keepalive_interval_seconds": 30,
+    "window_geometry": "",
 }
 
 

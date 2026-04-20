@@ -3,6 +3,19 @@ import sys
 import logging
 import msvcrt
 
+# Must run before any customtkinter/tkinter import: force System-DPI-Aware (Mode 1).
+# CustomTkinter otherwise sets Per-Monitor-Aware (Mode 2), which triggers a
+# synchronous widget rescale whenever the window moves between monitors with
+# different DPI. In combination with the alarm/helicopter blink timers and the
+# background threads that post via .after(), that rescale caused the freezes
+# and crashes reported when the window was dragged across monitors.
+if sys.platform.startswith("win"):
+    try:
+        import ctypes
+        ctypes.windll.shcore.SetProcessDpiAwareness(1)
+    except Exception:
+        pass
+
 _DIR = os.path.dirname(os.path.abspath(__file__))
 LOCK_PATH = os.path.join(_DIR, "bos_alarm_v2.lock")
 LOG_PATH = os.path.join(_DIR, "bos_alarm_v2.log")

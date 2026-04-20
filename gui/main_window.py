@@ -1,4 +1,5 @@
 import os
+import re
 import sys
 import customtkinter as ctk
 from gui.dashboard_tab import DashboardTab
@@ -7,6 +8,8 @@ from gui.settings_tab import SettingsTab
 from gui.sidebar import Sidebar
 from gui.theme import BG_ROOT, BG_BASE
 from version import VERSION
+
+_GEOMETRY_RE = re.compile(r"^(\d+)x(\d+)([+-]\d+)([+-]\d+)$")
 
 
 class MainWindow(ctk.CTk):
@@ -27,8 +30,11 @@ class MainWindow(ctk.CTk):
         ctk.set_default_color_theme("blue")
         self.configure(fg_color=BG_ROOT)
 
+        self._settings = settings
         self._on_quit = on_quit
         self.protocol("WM_DELETE_WINDOW", self._on_close)
+
+        self._apply_saved_geometry(settings.get("window_geometry"))
 
         # ── Sidebar navigation ──
         self._sidebar = Sidebar(
@@ -89,6 +95,7 @@ class MainWindow(ctk.CTk):
         self._sidebar.set_active(page_name)
 
     def _on_close(self):
+        self._save_geometry()
         self.withdraw()
 
     def show(self):
@@ -97,6 +104,59 @@ class MainWindow(ctk.CTk):
         self.focus_force()
 
     def quit_app(self):
+        self._save_geometry()
         if self._on_quit:
             self._on_quit()
         self.destroy()
+
+    def _save_geometry(self):
+        try:
+            geom = self.geometry()
+            if not _GEOMETRY_RE.match(geom):
+                return
+            self._settings.set("window_geometry", geom)
+            self._settings.save()
+        except Exception:
+            pass
+
+    def _apply_saved_geometry(self, geom_str):
+        if not geom_str:
+            return
+        match = _GEOMETRY_RE.match(geom_str)
+        if not match:
+            return
+        try:
+            w, h = int(match.group(1)), int(match.group(2))
+            x, y = int(match.group(3)), int(match.group(4))
+
+            # On Windows, clamp against the full virtual desktop (spans all
+            # attached monitors). If the saved center lies outside, the
+            # referenced monitor is no longer attached — fall back to default
+            # rather than opening off-screen. winfo_vroot* on Win32 reports
+            # only the primary monitor, so we use GetSystemMetrics directly.
+            bounds = self._virtual_desktop_bounds()
+            if bounds is not None:
+                vx, vy, vw, vh = bounds
+                cx, cy = x + w // 2, y + h // 2
+                if not (vx <= cx <= vx + vw and vy <= cy <= vy + vh):
+                    return
+
+            self.geometry(geom_str)
+        except Exception:
+            pass
+
+    def _virtual_desktop_bounds(self):
+        if not sys.platform.startswith("win"):
+            return None
+        try:
+            import ctypes
+            user32 = ctypes.windll.user32
+            left = user32.GetSystemMetrics(76)    # SM_XVIRTUALSCREEN
+            top = user32.GetSystemMetrics(77)     # SM_YVIRTUALSCREEN
+            width = user32.GetSystemMetrics(78)   # SM_CXVIRTUALSCREEN
+            height = user32.GetSystemMetrics(79)  # SM_CYVIRTUALSCREEN
+            if width > 0 and height > 0:
+                return (left, top, width, height)
+        except Exception:
+            pass
+        return None
