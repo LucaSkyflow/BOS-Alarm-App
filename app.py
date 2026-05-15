@@ -354,8 +354,11 @@ class App:
             except Exception:
                 pass
 
-            # Production MQTT status
+            # Production MQTT status — check_alive() forces a reconnect if
+            # the socket looks like a zombie (paho claims connected but no
+            # PINGRESP traffic).
             try:
+                self.mqtt_prod.check_alive()
                 connected = self.mqtt_prod.is_connected()
                 if self.window:
                     self.window.after(0, lambda c=connected: self.window.dashboard.set_mqtt_status("production", c))
@@ -365,6 +368,7 @@ class App:
             # Staging MQTT status
             try:
                 if self.settings.get("staging_enabled", False):
+                    self.mqtt_staging.check_alive()
                     connected = self.mqtt_staging.is_connected()
                     if self.window:
                         self.window.after(0, lambda c=connected: self.window.dashboard.set_mqtt_status("staging", c))

@@ -1,5 +1,7 @@
 import json
+import socket
 import ssl
+import time
 import logging
 import paho.mqtt.client as mqtt
 
@@ -15,6 +17,16 @@ except Exception:
 class MQTTManager:
     """READ ONLY MQTT client - no publish() exists in this class."""
 
+    # MQTT-level keepalive. Broker pings every KEEPALIVE seconds; paho marks
+    # the connection dead after ~1.5x without a PINGRESP. Lower = faster
+    # detection of zombie sockets, at the cost of slightly more traffic.
+    KEEPALIVE = 30
+
+    # Safety net: if paho still claims connected but no PINGRESP / message
+    # was seen for this long, the socket is almost certainly a zombie —
+    # force a reconnect. Must be well above KEEPALIVE * 2.
+    STALE_TIMEOUT = 120
+
     def __init__(self, broker, port, username, password, use_tls, topic, label,
                  on_message_callback=None, on_connect_callback=None, on_disconnect_callback=None):
         self._broker = self._clean_broker(broker)
@@ -28,6 +40,12 @@ class MQTTManager:
         self._on_connect_cb = on_connect_callback
         self._on_disconnect_cb = on_disconnect_callback
         self._client: mqtt.Client | None = None
+        # Broker-confirmed connection (set on CONNACK rc=0, cleared on DISCONNECT).
+        # paho's own is_connected() can stay True over a dead socket — this
+        # flag plus PINGRESP-based liveness is what we actually trust.
+        self._connected: bool = False
+        # monotonic timestamp of last sign of life (CONNACK, message, PINGRESP)
+        self._last_activity: float = 0.0
 
     @staticmethod
     def _clean_broker(broker: str) -> str:
@@ -77,6 +95,10 @@ class MQTTManager:
         self._client.on_connect = self._on_connect
         self._client.on_disconnect = self._on_disconnect
         self._client.on_message = self._on_message
+        self._client.on_socket_open = self._on_socket_open
+        # on_log lets us notice PINGRESP traffic so STALE_TIMEOUT doesn't
+        # trip on a perfectly healthy but quiet connection.
+        self._client.on_log = self._on_log
 
         self._client.reconnect_delay_set(min_delay=1, max_delay=30)
 
@@ -85,15 +107,17 @@ class MQTTManager:
             return
 
         log.info(f"MQTT [{self._label}] connecting to {self._broker}:{self._port} "
-                 f"(TLS={self._use_tls}, user={self._username!r})")
+                 f"(TLS={self._use_tls}, user={self._username!r}, keepalive={self.KEEPALIVE}s)")
         try:
-            self._client.connect_async(self._broker, self._port)
+            self._client.connect_async(self._broker, self._port, keepalive=self.KEEPALIVE)
             self._client.loop_start()
         except Exception as e:
             log.error(f"MQTT [{self._label}] connect_async failed: {e}")
             self._client = None
 
     def disconnect(self):
+        self._connected = False
+        self._last_activity = 0.0
         if self._client is not None:
             try:
                 self._client.loop_stop()
@@ -103,21 +127,103 @@ class MQTTManager:
             self._client = None
 
     def is_connected(self) -> bool:
-        return self._client is not None and self._client.is_connected()
+        """True only if the broker confirmed CONNACK AND paho still considers
+        the socket connected. paho's own ``is_connected()`` can lie after a
+        silently dropped TCP connection — the ``_connected`` flag, cleared
+        on the DISCONNECT callback, keeps the UI honest."""
+        return (
+            self._client is not None
+            and self._connected
+            and self._client.is_connected()
+        )
+
+    def check_alive(self) -> bool:
+        """Verify the connection is actually alive; force a reconnect if it
+        looks like a zombie. Returns True if connection appears healthy.
+
+        Call this periodically (e.g. from the health loop). Combined with
+        the shorter KEEPALIVE and OS-level TCP keepalive, this catches the
+        rare cases where paho still claims connected over a dead socket."""
+        if self._client is None:
+            return False
+        if not self._connected:
+            # not connected (or never was); paho's loop_start handles reconnect
+            return False
+        if self._last_activity == 0:
+            return True  # just connected, no activity expected yet
+        idle = time.monotonic() - self._last_activity
+        if idle > self.STALE_TIMEOUT:
+            log.warning(
+                f"MQTT [{self._label}] no PINGRESP/traffic for {idle:.0f}s "
+                f"while still 'connected' — forcing reconnect"
+            )
+            self._connected = False
+            if self._on_disconnect_cb:
+                try:
+                    self._on_disconnect_cb(self._label, "stale connection")
+                except Exception:
+                    pass
+            try:
+                self._client.reconnect()
+            except Exception as e:
+                log.error(f"MQTT [{self._label}] reconnect() failed: {e} — full reinit")
+                try:
+                    self.connect()
+                except Exception as e2:
+                    log.error(f"MQTT [{self._label}] full reinit failed: {e2}")
+            return False
+        return True
+
+    # ── Callbacks ──────────────────────────────────────────────────────────
+
+    def _on_socket_open(self, client, userdata, sock):
+        # OS-level TCP keepalive. Detects half-open sockets (NAT timeout,
+        # Windows wake-from-sleep) faster than the MQTT-layer ping.
+        try:
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
+            if hasattr(socket, "SIO_KEEPALIVE_VALS"):
+                # Windows: (onoff, idle_ms, interval_ms). After 20s idle, probe
+                # every 5s; OS drops the socket after ~10 missed probes.
+                sock.ioctl(socket.SIO_KEEPALIVE_VALS, (1, 20_000, 5_000))
+        except Exception as e:
+            log.debug(f"MQTT [{self._label}] socket keepalive setup failed: {e}")
 
     def _on_connect(self, client, userdata, flags, reason_code, properties=None):
+        # paho v2 ReasonCode compares cleanly to ints
+        rc_failed = False
+        try:
+            rc_failed = (int(getattr(reason_code, "value", reason_code)) != 0)
+        except Exception:
+            rc_failed = (reason_code != 0)
+
+        if rc_failed:
+            log.error(f"MQTT [{self._label}] connect REJECTED (rc={reason_code})")
+            self._connected = False
+            if self._on_disconnect_cb:
+                self._on_disconnect_cb(self._label, f"rejected: {reason_code}")
+            return
+
         log.info(f"MQTT [{self._label}] connected (rc={reason_code})")
-        client.subscribe(self._topic)
-        log.info(f"MQTT [{self._label}] subscribed to {self._topic}")
+        self._connected = True
+        self._last_activity = time.monotonic()
+
+        try:
+            client.subscribe(self._topic)
+            log.info(f"MQTT [{self._label}] subscribed to {self._topic}")
+        except Exception as e:
+            log.error(f"MQTT [{self._label}] subscribe failed: {e}")
+
         if self._on_connect_cb:
             self._on_connect_cb(self._label)
 
     def _on_disconnect(self, client, userdata, flags, reason_code, properties=None):
         log.warning(f"MQTT [{self._label}] disconnected (rc={reason_code})")
+        self._connected = False
         if self._on_disconnect_cb:
             self._on_disconnect_cb(self._label, str(reason_code))
 
     def _on_message(self, client, userdata, msg):
+        self._last_activity = time.monotonic()
         topic = msg.topic
         raw = msg.payload.decode("utf-8", errors="replace")
 
@@ -129,3 +235,10 @@ class MQTTManager:
 
         if self._on_message_cb:
             self._on_message_cb(topic, payload, raw, self._label)
+
+    def _on_log(self, client, userdata, level, buf):
+        # paho emits "Received PINGRESP" each successful keepalive round-trip.
+        # Counting that as activity prevents check_alive() from tripping on
+        # a healthy-but-quiet production feed.
+        if buf and ("PINGRESP" in buf or "Received CONNACK" in buf):
+            self._last_activity = time.monotonic()
