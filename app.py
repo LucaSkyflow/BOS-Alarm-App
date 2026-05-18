@@ -179,6 +179,8 @@ class App:
                 self.alarm_engine.stop_alarm_for_trip(trip_id, sound_only=True)
                 if self.window and not self.alarm_engine.has_active_alarms():
                     self.window.after(0, self.window.dashboard.stop_alarm_blink)
+                if self.window:
+                    self.window.after(0, lambda tid=trip_id: self.window.dashboard.dismiss_helicopter_banner(tid))
 
         # trip_completed → BEENDET
         if payload is not None and payload.get("name") == "trip_completed":
@@ -197,6 +199,8 @@ class App:
                 self.alarm_engine.stop_alarm_for_trip(trip_id)
                 if self.window and not self.alarm_engine.has_active_alarms():
                     self.window.after(0, self.window.dashboard.stop_alarm_blink)
+                if self.window:
+                    self.window.after(0, lambda tid=trip_id: self.window.dashboard.dismiss_helicopter_banner(tid))
 
         # trip_updated → status changes + helicopter detection
         if payload is not None and payload.get("name") == "trip_updated":
@@ -211,6 +215,8 @@ class App:
                     self.alarm_engine.stop_alarm_for_trip(trip_id, sound_only=True)
                     if self.window and not self.alarm_engine.has_active_alarms():
                         self.window.after(0, self.window.dashboard.stop_alarm_blink)
+                    if self.window:
+                        self.window.after(0, lambda tid=trip_id: self.window.dashboard.dismiss_helicopter_banner(tid))
             elif trip.get("status") == "IN_PROGRESS":
                 trip_id = trip.get("id") or self._extract_trip_id_from_topic(topic)
                 if trip_id:
@@ -228,6 +234,8 @@ class App:
                     self.alarm_engine.stop_alarm_for_trip(trip_id)
                     if self.window and not self.alarm_engine.has_active_alarms():
                         self.window.after(0, self.window.dashboard.stop_alarm_blink)
+                    if self.window:
+                        self.window.after(0, lambda tid=trip_id: self.window.dashboard.dismiss_helicopter_banner(tid))
             # Extract description from trip object if present
             desc = trip.get("description", "")
             if desc:
@@ -268,6 +276,8 @@ class App:
                         self.alarm_engine.stop_alarm_for_trip(trip_id)
                         if self.window and not self.alarm_engine.has_active_alarms():
                             self.window.after(0, self.window.dashboard.stop_alarm_blink)
+                        if self.window:
+                            self.window.after(0, lambda tid=trip_id: self.window.dashboard.dismiss_helicopter_banner(tid))
                 elif message.startswith("Trip description updated to "):
                     desc_text = message[len("Trip description updated to "):]
                     desc_trip_id = self._extract_trip_id_from_topic(topic)
@@ -288,6 +298,8 @@ class App:
                 self.alarm_engine.stop_alarm_for_trip(trip_id)
                 if self.window and not self.alarm_engine.has_active_alarms():
                     self.window.after(0, self.window.dashboard.stop_alarm_blink)
+                if self.window:
+                    self.window.after(0, lambda tid=trip_id: self.window.dashboard.dismiss_helicopter_banner(tid))
 
         # Return command: command_request_executed with value == "RETURN"
         if payload is not None and payload.get("name") == "command_request_executed":
