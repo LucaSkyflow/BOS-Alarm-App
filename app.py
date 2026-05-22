@@ -103,9 +103,11 @@ class App:
         # start MQTT
         self._start_mqtt()
 
-        # start health check thread
+        # start health check threads. MQTT runs on its own faster loop
+        # so Hue's 5-second HTTP timeout never delays zombie detection.
         self._health_stop.clear()
         threading.Thread(target=self._health_loop, daemon=True).start()
+        threading.Thread(target=self._mqtt_health_loop, daemon=True).start()
 
         # Auto-start audio keep-alive if configured
         if self.settings.get("keepalive_enabled", False) and self.settings.get("keepalive_auto_start", False):
@@ -366,30 +368,6 @@ class App:
             except Exception:
                 pass
 
-            # Production MQTT status — check_alive() forces a reconnect if
-            # the socket looks like a zombie (paho claims connected but no
-            # PINGRESP traffic).
-            try:
-                self.mqtt_prod.check_alive()
-                connected = self.mqtt_prod.is_connected()
-                if self.window:
-                    self.window.after(0, lambda c=connected: self.window.dashboard.set_mqtt_status("production", c))
-            except Exception:
-                pass
-
-            # Staging MQTT status
-            try:
-                if self.settings.get("staging_enabled", False):
-                    self.mqtt_staging.check_alive()
-                    connected = self.mqtt_staging.is_connected()
-                    if self.window:
-                        self.window.after(0, lambda c=connected: self.window.dashboard.set_mqtt_status("staging", c))
-                else:
-                    if self.window:
-                        self.window.after(0, lambda: self.window.dashboard.set_mqtt_status("staging", None))
-            except Exception:
-                pass
-
             # Audio Keep-Alive status
             try:
                 running, detail = self.keepalive.get_status()
@@ -400,6 +378,35 @@ class App:
                 pass
 
             self._health_stop.wait(15)
+
+    def _mqtt_health_loop(self):
+        """Dedicated MQTT watchdog. Runs every 5s so a zombie connection
+        is detected and torn down within ~5s + SUBSCRIBE_TIMEOUT (10s) +
+        a fresh handshake (~1-2s) — i.e. under 20s end-to-end. Kept on
+        its own thread because the main health loop can block up to 5s
+        on Hue's HTTP timeout."""
+        while not self._health_stop.is_set():
+            try:
+                self.mqtt_prod.check_alive()
+                connected = self.mqtt_prod.is_connected()
+                if self.window:
+                    self.window.after(0, lambda c=connected: self.window.dashboard.set_mqtt_status("production", c))
+            except Exception:
+                log.exception("MQTT prod health check failed")
+
+            try:
+                if self.settings.get("staging_enabled", False):
+                    self.mqtt_staging.check_alive()
+                    connected = self.mqtt_staging.is_connected()
+                    if self.window:
+                        self.window.after(0, lambda c=connected: self.window.dashboard.set_mqtt_status("staging", c))
+                else:
+                    if self.window:
+                        self.window.after(0, lambda: self.window.dashboard.set_mqtt_status("staging", None))
+            except Exception:
+                log.exception("MQTT staging health check failed")
+
+            self._health_stop.wait(5)
 
     # ---- GUI callbacks ----
     def _show_window(self):
