@@ -159,13 +159,22 @@ Log "Ziel: $target"
 try {{
     $proc = Get-Process -Id $appPid -ErrorAction Stop
     Log "Prozess gefunden, warte auf Beendigung..."
-    $proc.WaitForExit(30000) | Out-Null
+    $exited = $proc.WaitForExit(30000)
+    if (-not $exited -or -not $proc.HasExited) {{
+        Log "Timeout nach 30s — erzwinge Beendigung"
+        Stop-Process -Id $appPid -Force -ErrorAction SilentlyContinue
+        Start-Sleep -Seconds 2
+    }}
     Log "Prozess beendet"
 }} catch {{
     Log "Prozess bereits beendet"
 }}
 
-Start-Sleep -Seconds 2
+# Give Windows / AV time to release file handles before we touch the
+# target tree. Too short and Copy-Item races with the dying process
+# and leaves files in a half-locked state — exactly the PermissionError
+# we were seeing on next launch.
+Start-Sleep -Seconds 5
 
 Log "Kopiere Update..."
 try {{

@@ -1,14 +1,46 @@
 import sqlite3
 import json
 import os
+import shutil
+import sys
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
 log = logging.getLogger(__name__)
 
-_DIR = os.path.dirname(os.path.abspath(__file__))
+# In a frozen build, __file__ resolves into _internal/ — which is the
+# PyInstaller library dir and gets clobbered on every update. Anchor on
+# the EXE directory instead, matching settings_manager / updater.
+if getattr(sys, "frozen", False):
+    _DIR = os.path.dirname(sys.executable)
+else:
+    _DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.path.join(_DIR, "alarms.db")
+
+# Pre-v1.7.6 builds put the DB inside _internal/. If the new path is
+# missing but the legacy one exists, move it once so users don't lose
+# their alarm history across the upgrade.
+_LEGACY_DB_PATH = os.path.join(_DIR, "_internal", "alarms.db")
+
+
+def _migrate_legacy_db():
+    if os.path.exists(DB_PATH):
+        return
+    if not os.path.exists(_LEGACY_DB_PATH):
+        return
+    try:
+        shutil.move(_LEGACY_DB_PATH, DB_PATH)
+        log.info(f"Migrated alarms.db from {_LEGACY_DB_PATH} to {DB_PATH}")
+    except (OSError, PermissionError) as e:
+        # Fall back to a copy — if the legacy file is locked we'll at
+        # least preserve a snapshot. Worst case the user starts with a
+        # fresh DB; the legacy file stays where it was.
+        try:
+            shutil.copy2(_LEGACY_DB_PATH, DB_PATH)
+            log.warning(f"Copied (not moved) legacy alarms.db: {e}")
+        except Exception as e2:
+            log.warning(f"Could not migrate legacy alarms.db: {e2}")
 
 
 @dataclass
@@ -30,6 +62,10 @@ class AlarmRecord:
 class AlarmStore:
     def __init__(self, db_path: str = DB_PATH):
         self._db_path = db_path
+        # Migrate from the old _internal/ location before opening — must
+        # happen before _init_db() creates an empty DB at the new path.
+        if db_path == DB_PATH:
+            _migrate_legacy_db()
         self._init_db()
 
     def _connect(self) -> sqlite3.Connection:

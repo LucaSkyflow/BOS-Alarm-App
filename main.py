@@ -16,7 +16,16 @@ if sys.platform.startswith("win"):
     except Exception:
         pass
 
-_DIR = os.path.dirname(os.path.abspath(__file__))
+# In a PyInstaller-frozen build, __file__ resolves into _internal/ (the
+# bundled library dir, which gets overwritten on every update). Writing
+# log/lock/db there causes PermissionError after updates when the file
+# is still locked by AV scanning or a lingering old process. Anchor on
+# the EXE directory instead — same approach used by updater.py,
+# settings_manager.py and setup_wizard.py.
+if getattr(sys, "frozen", False):
+    _DIR = os.path.dirname(sys.executable)
+else:
+    _DIR = os.path.dirname(os.path.abspath(__file__))
 LOCK_PATH = os.path.join(_DIR, "bos_alarm_v2.lock")
 LOG_PATH = os.path.join(_DIR, "bos_alarm_v2.log")
 
@@ -24,14 +33,29 @@ _lock_file_handle = None
 
 
 def setup_logging():
-    logging.basicConfig(
-        level=logging.DEBUG,
-        format="%(asctime)s  %(levelname)-7s  %(name)s  %(message)s",
-        handlers=[
-            logging.FileHandler(LOG_PATH, encoding="utf-8"),
-            logging.StreamHandler(sys.stdout),
-        ],
-    )
+    """Configure logging. Resilient against a locked log file — never
+    let an I/O issue here kill the app before it even starts."""
+    fmt = "%(asctime)s  %(levelname)-7s  %(name)s  %(message)s"
+    handlers = [logging.StreamHandler(sys.stdout)]
+
+    file_handler = None
+    try:
+        file_handler = logging.FileHandler(LOG_PATH, encoding="utf-8")
+    except (PermissionError, OSError):
+        # Primary log file is locked (AV scan, lingering old process
+        # after update, etc.). Fall back to a PID-suffixed file so we
+        # can still capture diagnostics.
+        try:
+            fallback = LOG_PATH.replace(".log", f"_{os.getpid()}.log")
+            file_handler = logging.FileHandler(fallback, encoding="utf-8")
+        except (PermissionError, OSError):
+            # Last resort: stderr-only. App must still boot.
+            file_handler = None
+
+    if file_handler is not None:
+        handlers.insert(0, file_handler)
+
+    logging.basicConfig(level=logging.DEBUG, format=fmt, handlers=handlers)
 
 
 def acquire_single_instance_lock() -> bool:
