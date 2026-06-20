@@ -82,9 +82,9 @@ class AlarmEngine:
 
         Args:
             trip_id: Trip-ID des Einsatzes.
-            sound_only: Wenn True, wird nur der Ton gestoppt;
-                        Lichter/Plug laufen noch für alarm_light_seconds
-                        (Nachlaufzeit) weiter, bevor sie ebenfalls stoppen.
+            sound_only: Wenn True, läuft der Ton zusammen mit Lichtern/Plug
+                        noch für alarm_light_seconds (Nachlaufzeit) weiter
+                        und stoppt dann gemeinsam mit ihnen.
         """
         with self._lock:
             if not sound_only:
@@ -93,18 +93,20 @@ class AlarmEngine:
                 timer = self._nachlauf_timers.pop(trip_id, None)
                 if timer:
                     timer.cancel()
+                self._sound_active.discard(trip_id)
             else:
                 stop_event = None
-            self._sound_active.discard(trip_id)
+                # Ton bleibt aktiv – wird erst nach Nachlaufzeit gestoppt.
             still_active = bool(self._active) or bool(self._sound_active)
         if stop_event:
             stop_event.set()
-        self._sound.stop()
+        if not sound_only:
+            self._sound.stop()
         if not still_active and self._tray:
             self._tray.set_color("green")
 
         if sound_only:
-            # Nachlauf-Timer: nach alarm_light_seconds alles stoppen
+            # Nachlauf-Timer: nach alarm_light_seconds Ton + Lichter + Plug stoppen
             nachlauf = 20.0
             if self._settings:
                 nachlauf = float(self._settings.get("alarm_light_seconds", 20.0))
@@ -113,20 +115,25 @@ class AlarmEngine:
             timer.start()
             with self._lock:
                 self._nachlauf_timers[trip_id] = timer
-            log.info(f"Sound for trip {trip_id} stopped; Nachlaufzeit {nachlauf}s gestartet.")
+            log.info(f"Trip {trip_id} bestätigt; Nachlaufzeit {nachlauf}s gestartet (Ton + Licht).")
         else:
             log.info(f"Alarm for trip {trip_id} stopped.")
             if not still_active and self._on_all_alarms_cleared:
                 self._on_all_alarms_cleared()
 
     def _finish_nachlauf(self, trip_id: str):
-        """Wird nach Ablauf der Nachlaufzeit aufgerufen – stoppt Lichter/Plug."""
+        """Wird nach Ablauf der Nachlaufzeit aufgerufen – stoppt Ton, Lichter, Plug."""
         with self._lock:
             stop_event = self._active.pop(trip_id, None)
             self._nachlauf_timers.pop(trip_id, None)
+            self._sound_active.discard(trip_id)
             still_active = bool(self._active) or bool(self._sound_active)
         if stop_event:
             stop_event.set()
+        # Ton nur stoppen, wenn kein anderer Alarm/Nachlauf mehr aktiv ist,
+        # damit parallele Alarme nicht abgewürgt werden.
+        if not still_active:
+            self._sound.stop()
         if not still_active and self._tray:
             self._tray.set_color("green")
         log.info(f"Nachlaufzeit for trip {trip_id} ended.")
