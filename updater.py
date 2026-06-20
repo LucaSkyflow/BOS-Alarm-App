@@ -139,17 +139,23 @@ def download_and_apply(asset_url: str, new_version: str, on_status=None):
         log_path = os.path.join(_APP_DIR, "update.log")
 
         ps_script = os.path.join(tempfile.gettempdir(), "bos_alarm_update.ps1")
+        fallback_log = os.path.join(tempfile.gettempdir(), "bos_alarm_update.log")
         with open(ps_script, "w", encoding="utf-8") as f:
             f.write(f'''
 $appPid = {pid}
 $source = "{source_dir}"
 $target = "{_APP_DIR}"
-$logFile = "{log_path}"
+$primaryLog = "{log_path}"
+$fallbackLog = "{fallback_log}"
 $exe = "{exe_path}"
 
 function Log($msg) {{
     $line = "[$(Get-Date -Format 'HH:mm:ss')] $msg"
-    Add-Content -Path $logFile -Value $line -Encoding UTF8
+    try {{
+        Add-Content -Path $primaryLog -Value $line -Encoding UTF8 -ErrorAction Stop
+    }} catch {{
+        try {{ Add-Content -Path $fallbackLog -Value $line -Encoding UTF8 -ErrorAction Stop }} catch {{}}
+    }}
 }}
 
 Log "Update gestartet (warte auf PID $appPid)"
@@ -170,6 +176,14 @@ try {{
     Log "Prozess bereits beendet"
 }}
 
+# Auch jeden weiteren BOS-Alarm-Prozess beenden, der noch Datei-Handles
+# auf $target hält (zweite Instanz, hängender Tray, etc.) — sonst
+# scheitert Copy-Item mit "Datei wird von einem anderen Prozess verwendet".
+Get-Process | Where-Object {{ $_.Path -and $_.Path.StartsWith($target, [System.StringComparison]::OrdinalIgnoreCase) }} | ForEach-Object {{
+    Log "Beende zusätzlichen Prozess PID $($_.Id) ($($_.Path))"
+    try {{ Stop-Process -Id $_.Id -Force -ErrorAction Stop }} catch {{ Log "Konnte PID $($_.Id) nicht beenden: $_" }}
+}}
+
 # Give Windows / AV time to release file handles before we touch the
 # target tree. Too short and Copy-Item races with the dying process
 # and leaves files in a half-locked state — exactly the PermissionError
@@ -178,7 +192,7 @@ Start-Sleep -Seconds 5
 
 Log "Kopiere Update..."
 try {{
-    Copy-Item -Path "$source\*" -Destination $target -Recurse -Force
+    Copy-Item -Path "$source\*" -Destination $target -Recurse -Force -ErrorAction Stop
     Log "Kopieren erfolgreich"
 }} catch {{
     Log "FEHLER beim Kopieren: $_"
@@ -199,9 +213,22 @@ Log "Update abgeschlossen"
 ''')
 
         log.info(f"Launching PowerShell updater (PID={pid})")
+        # Direkt starten mit DETACHED_PROCESS — kein cmd.exe/start /B drumherum.
+        # Die alte `start /B`-Variante lief bei manchen Updates nicht an, weil
+        # die windowless BOS-Alarm-App keine Konsole besitzt und der cmd-shim
+        # mit os._exit(0) der App teilweise abriss, bevor PowerShell überhaupt
+        # gestartet war (Update.log blieb dann ohne neuen Eintrag).
+        DETACHED_PROCESS = 0x00000008
+        CREATE_NEW_PROCESS_GROUP = 0x00000200
+        CREATE_NO_WINDOW = 0x08000000
         subprocess.Popen(
-            f'start /B powershell -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "{ps_script}"',
-            shell=True,
+            ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass",
+             "-WindowStyle", "Hidden", "-File", ps_script],
+            creationflags=DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP | CREATE_NO_WINDOW,
+            close_fds=True,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
         )
 
         return True
